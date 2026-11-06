@@ -118,6 +118,8 @@
 }
 
 .mod-inbox-input,
+.mod-inbox-time-input,
+.mod-inbox-duration-input,
 .mod-inbox-textarea {
   width: 100%;
   padding: 7px 9px;
@@ -141,6 +143,65 @@
   min-height: 64px;
   resize: vertical;
   line-height: 1.65;
+}
+
+.mod-inbox-time-fields {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.mod-inbox-time-field {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.mod-inbox-time-field:first-child {
+  flex: 0 0 108px;
+}
+
+.mod-inbox-time-field:last-child {
+  flex: 1;
+}
+
+.mod-inbox-time-label {
+  color: #a58c86;
+  font-size: 9.5px;
+  letter-spacing: 0.02em;
+}
+
+.mod-inbox-duration-wrap {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.mod-inbox-duration-input {
+  width: 62px;
+}
+
+.mod-inbox-time-unit {
+  flex: none;
+  color: #a58c86;
+  font-size: 9.5px;
+}
+
+.mod-inbox-form-hint {
+  margin: -2px 0 0;
+  color: #b39b94;
+  font-size: 9.5px;
+  line-height: 1.4;
+}
+
+.mod-inbox-task-when {
+  overflow: hidden;
+  color: #0f9b8e;
+  font-size: 9.5px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .mod-inbox-form-actions {

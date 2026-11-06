@@ -7,12 +7,17 @@
  * only, matching the rest of the static demo.
  */
 
-import { parseDateKey, toDateKey } from '../../calendar.js';
-import { TASK_STATUS_ORDER, taskStatusCounts, nextTaskStatus } from '../../tasks.js';
+import { parseDateKey, timeToMinutes, toDateKey } from '../../calendar.js';
+import { TASK_STATUS_LABELS, TASK_STATUS_ORDER, taskStatusCounts, nextTaskStatus } from '../../tasks.js';
 
 export const TASK_TITLE_MAX_LENGTH = 80;
 export const NOTE_TEXT_MAX_LENGTH = 200;
 export const DEFAULT_TASK_ICON = '📝';
+export const TASK_DURATION_MIN = 5;
+export const TASK_DURATION_MAX = 720;
+export const TASK_SCHEDULE_START = 7 * 60;
+export const TASK_SCHEDULE_END = 21 * 60;
+export const TASK_EVENT_COLOR = 'teal';
 export const NOTE_TONES = Object.freeze(['yellow', 'pink', 'blue']);
 export const NOTE_TILTS = Object.freeze([-1.2, 1.4, -0.6]);
 
@@ -27,6 +32,56 @@ function invalid(code, message) {
 
 function textLength(value) {
   return [...value].length;
+}
+
+function minutesToTime(minutes) {
+  return `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
+}
+
+function normalizeSchedule({ date, start, duration, fallbackDate } = {}) {
+  const startText = String(start ?? '').trim();
+  const durationText = String(duration ?? '').trim();
+  const hasStart = startText !== '';
+  const hasDuration = durationText !== '';
+
+  if (!hasStart && !hasDuration) return null;
+  if (!hasStart || !hasDuration) {
+    throw invalid('INBOX_TASK_SCHEDULE_INVALID', '请同时填写开始时间和持续时间');
+  }
+
+  const startMinutes = timeToMinutes(startText);
+  if (!Number.isFinite(startMinutes)) {
+    throw invalid('INBOX_TASK_SCHEDULE_INVALID', '开始时间格式应为 HH:mm');
+  }
+  if (startMinutes < TASK_SCHEDULE_START || startMinutes >= TASK_SCHEDULE_END) {
+    throw invalid('INBOX_TASK_SCHEDULE_INVALID', '开始时间需在 07:00–21:00 之间');
+  }
+
+  const durationMinutes = Number(durationText);
+  if (
+    !Number.isInteger(durationMinutes) ||
+    durationMinutes < TASK_DURATION_MIN ||
+    durationMinutes > TASK_DURATION_MAX
+  ) {
+    throw invalid(
+      'INBOX_TASK_SCHEDULE_INVALID',
+      `持续时间需为 ${TASK_DURATION_MIN}–${TASK_DURATION_MAX} 分钟的整数`
+    );
+  }
+  if (startMinutes + durationMinutes > TASK_SCHEDULE_END) {
+    throw invalid('INBOX_TASK_SCHEDULE_INVALID', '结束时间需在 21:00 前（时间表范围 07:00–21:00）');
+  }
+
+  const parsedDate = parseDateKey(String(date ?? fallbackDate ?? ''));
+  if (!parsedDate) {
+    throw invalid('INBOX_TASK_SCHEDULE_INVALID', '任务日期必须是 YYYY-MM-DD');
+  }
+
+  return {
+    date: toDateKey(parsedDate),
+    start: minutesToTime(startMinutes),
+    duration: durationMinutes,
+  };
 }
 
 export function normalizeTaskTitle(value) {
@@ -65,7 +120,11 @@ function createDefaultIdFactory() {
  *   id: string,
  *   title: string,
  *   icon: string,
- *   status: 'todo' | 'partial' | 'done'
+ *   status: 'todo' | 'partial' | 'done',
+ *   date?: string,
+ *   start?: string,
+ *   duration?: number,
+ *   end?: string
  * }} InboxTask
  *
  * @typedef {{
@@ -100,8 +159,17 @@ export function createInboxStore({ tasks = [], notes = [], idFactory } = {}) {
     for (const listener of [...listeners]) listener();
   }
 
+  function presentTask(task) {
+    const result = { ...task, status: statuses.get(task.id) ?? 'todo' };
+    if (result.start && result.duration) {
+      const endMinutes = timeToMinutes(result.start) + Number(result.duration);
+      if (Number.isFinite(endMinutes)) result.end = minutesToTime(endMinutes);
+    }
+    return result;
+  }
+
   function listTasks() {
-    return taskItems.map((task) => ({ ...task, status: statuses.get(task.id) ?? 'todo' }));
+    return taskItems.map(presentTask);
   }
 
   function findTask(id) {
@@ -115,37 +183,60 @@ export function createInboxStore({ tasks = [], notes = [], idFactory } = {}) {
     return statuses.get(id) ?? 'todo';
   }
 
-  function addTask({ title, icon } = {}) {
+  function addTask({ title, icon, date, start, duration } = {}) {
+    const titleText = normalizeTaskTitle(title);
+    const schedule = normalizeSchedule({ date, start, duration });
     const task = {
       id: '',
-      title: normalizeTaskTitle(title),
+      title: titleText,
       icon: normalizeTaskIcon(icon),
       status: 'todo',
     };
+    if (schedule) Object.assign(task, schedule);
     do {
       task.id = nextId('task');
     } while (taskItems.some((item) => item.id === task.id));
     taskItems.push(task);
     statuses.set(task.id, 'todo');
     notify();
-    return { ...task };
+    return presentTask(task);
   }
 
   function updateTask(id, changes = {}) {
     const { task } = findTask(id);
     if (changes.title !== undefined) task.title = normalizeTaskTitle(changes.title);
     if (changes.icon !== undefined) task.icon = normalizeTaskIcon(changes.icon);
+
+    const hasScheduleField = ['date', 'start', 'duration'].some((key) =>
+      Object.prototype.hasOwnProperty.call(changes, key)
+    );
+    if (hasScheduleField) {
+      const schedule = normalizeSchedule({
+        date: changes.date,
+        start: changes.start,
+        duration: changes.duration,
+        fallbackDate: task.date,
+      });
+      if (schedule) {
+        Object.assign(task, schedule);
+      } else {
+        delete task.date;
+        delete task.start;
+        delete task.duration;
+      }
+    }
+
     notify();
-    return { ...task, status: statuses.get(task.id) ?? 'todo' };
+    return presentTask(task);
   }
 
   function deleteTask(id) {
     const { index, task } = findTask(id);
-    const status = statuses.get(id) ?? task.status;
+    const removed = presentTask(task);
     taskItems.splice(index, 1);
     statuses.delete(id);
     notify();
-    return { ...task, status };
+    return removed;
   }
 
   function setTaskStatus(id, status) {
@@ -167,6 +258,26 @@ export function createInboxStore({ tasks = [], notes = [], idFactory } = {}) {
 
   function taskProgress() {
     return taskStatusCounts(taskItems, statuses);
+  }
+
+  function listCalendarEvents(dateKey) {
+    return taskItems
+      .filter((task) => task.date === dateKey && task.start && task.duration)
+      .map((task) => {
+        const item = presentTask(task);
+        return {
+          id: `task-event-${task.id}`,
+          title: task.title,
+          date: task.date,
+          start: task.start,
+          end: item.end,
+          color: TASK_EVENT_COLOR,
+          icon: 'doc',
+          note: `清单任务 · ${TASK_STATUS_LABELS[item.status] ?? item.status}`,
+        };
+      })
+      .filter((event) => Boolean(event.end))
+      .sort((a, b) => timeToMinutes(a.start) - timeToMinutes(b.start));
   }
 
   function noteDateKey(value) {
@@ -233,6 +344,7 @@ export function createInboxStore({ tasks = [], notes = [], idFactory } = {}) {
     setTaskStatus,
     cycleTaskStatus,
     taskProgress,
+    listCalendarEvents,
     listNotes,
     addNote,
     updateNote,

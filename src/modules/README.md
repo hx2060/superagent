@@ -12,7 +12,7 @@ src/modules/<name>/
 
 当前已落地的模块：
 
-- `inbox/`：日视图「清单」与「便签」的新增 / 修改 / 删除。注册点为 `<aside class="day-sidebar" data-module-root="inbox">`，共享状态走 `services.inbox`，模块样式在 `index.html` 中以单独 `<link>` 加载。
+- `inbox/`：日视图「清单」与「便签」的新增 / 修改 / 删除；清单任务可选开始时间与持续分钟，并同步到日视图时间表。注册点为 `<aside class="day-sidebar" data-module-root="inbox">`，共享状态走 `services.inbox`，模块样式在 `index.html` 中以单独 `<link>` 加载。
 
 ## 注册点约定
 

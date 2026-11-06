@@ -9,11 +9,13 @@
  * It only reads/writes inside `context.root` and never imports app internals.
  */
 
-import { toDateKey } from '../../calendar.js';
+import { formatDuration, formatTimeRange, parseDateKey, toDateKey } from '../../calendar.js';
 import { TASK_STATUS_LABELS, nextTaskStatus } from '../../tasks.js';
 import {
   NOTE_TEXT_MAX_LENGTH,
   NOTE_TONES,
+  TASK_DURATION_MAX,
+  TASK_DURATION_MIN,
   TASK_TITLE_MAX_LENGTH,
 } from './store.js';
 
@@ -21,6 +23,8 @@ export {
   DEFAULT_TASK_ICON,
   NOTE_TEXT_MAX_LENGTH,
   NOTE_TONES,
+  TASK_DURATION_MAX,
+  TASK_DURATION_MIN,
   TASK_TITLE_MAX_LENGTH,
   createInboxStore,
   normalizeNoteText,
@@ -28,6 +32,13 @@ export {
 } from './store.js';
 
 const STATUS_CYCLE_HINT = '待完成 → 部分完成 → 完成';
+const SCHEDULE_START_MIN = '07:00';
+const SCHEDULE_START_MAX = '20:59';
+
+function formatDateLabel(dateKey) {
+  const date = parseDateKey(dateKey);
+  return date ? `${date.getMonth() + 1}月${date.getDate()}日` : dateKey;
+}
 
 function escapeHtml(value) {
   return String(value).replace(/[&<>"']/g, (character) => {
@@ -83,10 +94,14 @@ export function mount(context) {
   let dateKey = toDateKey(context.state?.anchor instanceof Date ? context.state.anchor : new Date());
   let addingTask = false;
   let taskDraft = '';
+  let taskAddStart = '';
+  let taskAddDuration = '';
   let addingNote = false;
   let noteDraft = '';
   let editingTaskId = null;
   let taskEditDraft = '';
+  let taskEditStart = '';
+  let taskEditDuration = '';
   let editingNoteId = null;
   let noteEditDraft = '';
   let formError = null;
@@ -101,12 +116,64 @@ export function mount(context) {
     if (error?.code === 'INBOX_NOTE_TEXT_INVALID') {
       return `请输入 1–${NOTE_TEXT_MAX_LENGTH} 个字符的便签内容`;
     }
+    if (error?.code === 'INBOX_TASK_SCHEDULE_INVALID') {
+      return error.message || '时间填写不完整';
+    }
     return '保存失败，请稍后重试';
   }
 
   function formErrorHtml(kind, id) {
     if (!formError || formError.kind !== kind || formError.id !== id) return '';
     return `<p class="mod-inbox-error" role="alert">${escapeHtml(formError.message)}</p>`;
+  }
+
+  function taskScheduleLabel(task) {
+    if (!task.start) return '';
+    const time = task.end
+      ? `${formatTimeRange(task.start, task.end)} · ${formatDuration(task.duration)}`
+      : task.start;
+    if (!task.date || task.date === dateKey) return time;
+    return `${formatDateLabel(task.date)} ${time}`;
+  }
+
+  function renderTaskTimeFields({ variant, taskId, start, duration, hint }) {
+    const baseId = variant === 'add' ? 'mod-inbox-task-add' : `mod-inbox-task-edit-${taskId}`;
+    const startAttr = variant === 'add' ? 'data-inbox-task-add-start' : 'data-inbox-task-edit-start';
+    const durationAttr =
+      variant === 'add' ? 'data-inbox-task-add-duration' : 'data-inbox-task-edit-duration';
+    return `<div class="mod-inbox-time-fields">
+      <label class="mod-inbox-time-field" for="${baseId}-start">
+        <span class="mod-inbox-time-label">开始</span>
+        <input
+          id="${baseId}-start"
+          class="mod-inbox-time-input"
+          ${startAttr}
+          type="time"
+          min="${SCHEDULE_START_MIN}"
+          max="${SCHEDULE_START_MAX}"
+          value="${escapeHtml(start)}"
+        />
+      </label>
+      <label class="mod-inbox-time-field" for="${baseId}-duration">
+        <span class="mod-inbox-time-label">持续</span>
+        <span class="mod-inbox-duration-wrap">
+          <input
+            id="${baseId}-duration"
+            class="mod-inbox-duration-input"
+            ${durationAttr}
+            type="number"
+            inputmode="numeric"
+            min="${TASK_DURATION_MIN}"
+            max="${TASK_DURATION_MAX}"
+            step="5"
+            placeholder="30"
+            value="${escapeHtml(duration)}"
+          />
+          <span class="mod-inbox-time-unit">分钟</span>
+        </span>
+      </label>
+    </div>
+    <p class="mod-inbox-form-hint">${escapeHtml(hint)}</p>`;
   }
 
   function renderTaskRow(task) {
@@ -129,6 +196,15 @@ export function mount(context) {
             autocomplete="off"
             value="${escapeHtml(taskEditDraft)}"
           />
+          ${renderTaskTimeFields({
+            variant: 'edit',
+            taskId: task.id,
+            start: taskEditStart,
+            duration: taskEditDuration,
+            hint: task.date
+              ? `时间同步到 ${formatDateLabel(task.date)} 的时间表`
+              : '时间可选 · 填写后同步到当日时间表',
+          })}
           <div class="mod-inbox-form-actions">
             <button type="submit" class="mod-inbox-primary">保存</button>
             <button type="button" class="mod-inbox-secondary" data-inbox-cancel>取消</button>
@@ -139,11 +215,12 @@ export function mount(context) {
     }
 
     const confirming = pendingDelete?.kind === 'task' && pendingDelete.id === task.id;
-    return `<li class="day-task mod-inbox-task" data-task-row="${id}" data-status="${status}">
+    return `<li class="day-task mod-inbox-task" data-task-row="${id}" data-status="${status}" data-scheduled="${task.start ? 'true' : 'false'}">
       <span class="task-emoji" aria-hidden="true">${escapeHtml(task.icon)}</span>
       <span class="task-body">
         <span class="task-title">${title}</span>
         <span class="task-status-label">${label}</span>
+        ${task.start ? `<span class="mod-inbox-task-when">${escapeHtml(taskScheduleLabel(task))}</span>` : ''}
       </span>
       <span class="mod-inbox-actions">
         <button
@@ -188,6 +265,13 @@ export function mount(context) {
         placeholder="新任务，例如：整理桌面"
         value="${escapeHtml(taskDraft)}"
       />
+      ${renderTaskTimeFields({
+        variant: 'add',
+        taskId: null,
+        start: taskAddStart,
+        duration: taskAddDuration,
+        hint: '时间可选 · 填写后同步到当日时间表',
+      })}
       <div class="mod-inbox-form-actions">
         <button type="submit" class="mod-inbox-primary">添加</button>
         <button type="button" class="mod-inbox-secondary" data-inbox-cancel>取消</button>
@@ -395,6 +479,8 @@ export function mount(context) {
       closeOtherForms();
       pendingDelete = null;
       taskDraft = '';
+      taskAddStart = '';
+      taskAddDuration = '';
       if (wasAdding) {
         addingTask = false;
         focusRequest = { type: 'task-add' };
@@ -432,10 +518,14 @@ export function mount(context) {
         if (id === 'new') {
           addingTask = false;
           taskDraft = '';
+          taskAddStart = '';
+          taskAddDuration = '';
           focusRequest = { type: 'task-add' };
         } else {
           editingTaskId = null;
           taskEditDraft = '';
+          taskEditStart = '';
+          taskEditDuration = '';
           focusRequest = { type: 'task-edit-button', id };
         }
         render();
@@ -468,6 +558,8 @@ export function mount(context) {
       pendingDelete = null;
       editingTaskId = id;
       taskEditDraft = task.title;
+      taskEditStart = task.start ?? '';
+      taskEditDuration = task.duration ? String(task.duration) : '';
       focusRequest = { type: 'task-edit-input' };
       render();
       return;
@@ -555,13 +647,29 @@ export function mount(context) {
       const id = taskForm.dataset.inboxTaskForm;
       if (id === 'new') {
         const input = taskForm.querySelector('[data-inbox-task-add-input]');
+        const startInput = taskForm.querySelector('[data-inbox-task-add-start]');
+        const durationInput = taskForm.querySelector('[data-inbox-task-add-duration]');
         taskDraft = input?.value ?? taskDraft;
+        taskAddStart = startInput?.value ?? taskAddStart;
+        taskAddDuration = durationInput?.value ?? taskAddDuration;
         try {
-          const task = inbox.addTask({ title: taskDraft });
+          const task = inbox.addTask({
+            title: taskDraft,
+            date: dateKey,
+            start: taskAddStart,
+            duration: taskAddDuration,
+          });
           addingTask = false;
           taskDraft = '';
+          taskAddStart = '';
+          taskAddDuration = '';
           formError = null;
-          announcement = { scope: 'task', text: `已添加任务「${task.title}」` };
+          announcement = {
+            scope: 'task',
+            text: task.start
+              ? `已添加任务「${task.title}」，已同步到时间表`
+              : `已添加任务「${task.title}」`,
+          };
           focusRequest = { type: 'task-edit-button', id: task.id };
           render();
         } catch (error) {
@@ -573,13 +681,30 @@ export function mount(context) {
       }
 
       const input = taskForm.querySelector('[data-inbox-task-edit-input]');
+      const startInput = taskForm.querySelector('[data-inbox-task-edit-start]');
+      const durationInput = taskForm.querySelector('[data-inbox-task-edit-duration]');
       taskEditDraft = input?.value ?? taskEditDraft;
+      taskEditStart = startInput?.value ?? taskEditStart;
+      taskEditDuration = durationInput?.value ?? taskEditDuration;
       try {
-        const task = inbox.updateTask(id, { title: taskEditDraft });
+        const current = inbox.listTasks().find((item) => item.id === id);
+        const task = inbox.updateTask(id, {
+          title: taskEditDraft,
+          date: current?.date ?? dateKey,
+          start: taskEditStart,
+          duration: taskEditDuration,
+        });
         editingTaskId = null;
         taskEditDraft = '';
+        taskEditStart = '';
+        taskEditDuration = '';
         formError = null;
-        announcement = { scope: 'task', text: `已保存任务「${task.title}」` };
+        announcement = {
+          scope: 'task',
+          text: task.start
+            ? `已保存任务「${task.title}」，时间表已同步`
+            : `已保存任务「${task.title}」`,
+        };
         focusRequest = { type: 'task-edit-button', id };
         render();
       } catch (error) {
@@ -635,7 +760,11 @@ export function mount(context) {
     const target = event.target;
     if (!(target instanceof HTMLElement)) return;
     if (target.matches('[data-inbox-task-add-input]')) taskDraft = target.value;
+    else if (target.matches('[data-inbox-task-add-start]')) taskAddStart = target.value;
+    else if (target.matches('[data-inbox-task-add-duration]')) taskAddDuration = target.value;
     else if (target.matches('[data-inbox-task-edit-input]')) taskEditDraft = target.value;
+    else if (target.matches('[data-inbox-task-edit-start]')) taskEditStart = target.value;
+    else if (target.matches('[data-inbox-task-edit-duration]')) taskEditDuration = target.value;
     else if (target.matches('[data-inbox-note-add-input]')) noteDraft = target.value;
     else if (target.matches('[data-inbox-note-edit-input]')) noteEditDraft = target.value;
     else return;
@@ -653,6 +782,8 @@ export function mount(context) {
       const id = editingTaskId;
       editingTaskId = null;
       taskEditDraft = '';
+      taskEditStart = '';
+      taskEditDuration = '';
       formError = null;
       focusRequest = { type: 'task-edit-button', id };
       render();
@@ -670,6 +801,8 @@ export function mount(context) {
     if (addingTask) {
       addingTask = false;
       taskDraft = '';
+      taskAddStart = '';
+      taskAddDuration = '';
       formError = null;
       focusRequest = { type: 'task-add' };
       render();

@@ -193,3 +193,103 @@ test('空监听器与非函数订阅会被拒绝', () => {
   const store = createInboxStore();
   assert.throws(() => store.subscribe(null), TypeError);
 });
+
+test('任务：可选时间会同步为当日时间表事件', () => {
+  const store = createInboxStore({ idFactory: testIds() });
+  const task = store.addTask({
+    title: '写方案',
+    date: '2026-11-06',
+    start: '9:30',
+    duration: 45,
+  });
+
+  assert.equal(task.date, '2026-11-06');
+  assert.equal(task.start, '09:30');
+  assert.equal(task.duration, 45);
+  assert.equal(task.end, '10:15');
+
+  const events = store.listCalendarEvents('2026-11-06');
+  assert.equal(events.length, 1);
+  assert.deepEqual(events[0], {
+    id: `task-event-${task.id}`,
+    title: '写方案',
+    date: '2026-11-06',
+    start: '09:30',
+    end: '10:15',
+    color: 'teal',
+    icon: 'doc',
+    note: '清单任务 · 待完成',
+  });
+  assert.equal(store.listCalendarEvents('2026-11-07').length, 0);
+});
+
+test('任务：不填时间时只留在清单，不进入时间表', () => {
+  const store = createInboxStore({ idFactory: testIds() });
+  const task = store.addTask({ title: '随手整理' });
+
+  assert.equal(task.date, undefined);
+  assert.equal(task.start, undefined);
+  assert.equal(task.duration, undefined);
+  assert.equal(task.end, undefined);
+  assert.equal(store.listCalendarEvents('2026-11-06').length, 0);
+});
+
+test('任务：时间字段必须成对填写，且开始、持续、结束需合法', () => {
+  const store = createInboxStore({ idFactory: testIds() });
+  const invalid = (input, message) =>
+    assert.throws(
+      () => store.addTask({ title: '时间任务', date: '2026-11-06', ...input }),
+      (error) => error.code === 'INBOX_TASK_SCHEDULE_INVALID' && error.message === message
+    );
+
+  invalid({ start: '09:30' }, '请同时填写开始时间和持续时间');
+  invalid({ duration: 30 }, '请同时填写开始时间和持续时间');
+  invalid({ start: '25:00', duration: 30 }, '开始时间格式应为 HH:mm');
+  invalid({ start: '06:59', duration: 30 }, '开始时间需在 07:00–21:00 之间');
+  invalid({ start: '20:30', duration: 60 }, '结束时间需在 21:00 前（时间表范围 07:00–21:00）');
+  invalid({ start: '10:00', duration: 0 }, `持续时间需为 5–720 分钟的整数`);
+  invalid({ start: '10:00', duration: 721 }, `持续时间需为 5–720 分钟的整数`);
+  invalid({ date: '', start: '10:00', duration: 30 }, '任务日期必须是 YYYY-MM-DD');
+  assert.equal(store.listTasks().length, 0);
+});
+
+test('任务：修改和清空时间会同步更新或移出时间表', () => {
+  const store = createInboxStore({ idFactory: testIds() });
+  const task = store.addTask({ title: '先不排期' });
+
+  store.updateTask(task.id, {
+    title: '排到下午',
+    date: '2026-11-06',
+    start: '14:00',
+    duration: 90,
+  });
+  assert.equal(store.listTasks()[0].end, '15:30');
+  assert.equal(store.listCalendarEvents('2026-11-06')[0].title, '排到下午');
+
+  store.updateTask(task.id, { start: '15:00', duration: 30 });
+  assert.equal(store.listCalendarEvents('2026-11-06')[0].end, '15:30');
+  assert.equal(store.listTasks()[0].date, '2026-11-06');
+
+  store.updateTask(task.id, { start: '', duration: '' });
+  const cleared = store.listTasks()[0];
+  assert.equal(cleared.date, undefined);
+  assert.equal(cleared.start, undefined);
+  assert.equal(cleared.duration, undefined);
+  assert.equal(store.listCalendarEvents('2026-11-06').length, 0);
+});
+
+test('任务：状态变化会反映在时间表事件备注中，删除后事件消失', () => {
+  const store = createInboxStore({ idFactory: testIds() });
+  const task = store.addTask({
+    title: '评审',
+    date: '2026-11-06',
+    start: '10:00',
+    duration: 30,
+  });
+
+  store.cycleTaskStatus(task.id);
+  assert.equal(store.listCalendarEvents('2026-11-06')[0].note, '清单任务 · 部分完成');
+
+  store.deleteTask(task.id);
+  assert.equal(store.listCalendarEvents('2026-11-06').length, 0);
+});

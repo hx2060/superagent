@@ -1,6 +1,6 @@
 # 日程 · 对接文档
 
-版本：`0.2`
+版本：`0.3`
 配套接口：`docs/interfaces.md`
 
 本文档描述如何把「日程」接到真实数据源、如何新增模块，以及本地 / 公网预览的注意事项。当前实现是**零依赖静态页 + 示例数据**，尚未接入后端；文中标注“建议”或“尚未实现”的部分属于后续对接契约，不是现有能力。
@@ -14,7 +14,7 @@ npm start                 # 本地静态服务，默认 http://127.0.0.1:4173
 - 入口：`index.html` → `src/app.js`。
 - 数据：`src/data.js` 的 `sampleEvents` / `sampleNotes` / `sampleTasks`，日期相对浏览器当天。
 - 状态：视图、锚点日期、清单 / 便签都在页面内存中（`src/modules/inbox/store.js`）；刷新后恢复示例初始值。
-- 清单 / 便签的增删改由 `src/modules/inbox` 负责，store 通过 `services.inbox` 注入；目前没有持久化。
+- 清单 / 便签的增删改由 `src/modules/inbox` 负责，store 通过 `services.inbox` 注入；清单任务可选时间会在日视图时间表派生事件；目前没有持久化。
 - 没有构建步骤、没有运行时依赖、没有网络请求。
 
 URL 参数：
@@ -42,8 +42,8 @@ interface CalendarDataSource {
   listNotes(date: string): Promise<StickyNote[]>;
   listTasks(): Promise<Task[]>;
   updateTaskStatus(id: string, status: TaskStatus): Promise<Task>;
-  createTask(input: { title: string; icon?: string }): Promise<Task>;
-  updateTask(id: string, input: { title?: string; icon?: string }): Promise<Task>;
+  createTask(input: { title: string; icon?: string; date?: string; start?: string; duration?: number }): Promise<Task>;
+  updateTask(id: string, input: { title?: string; icon?: string; date?: string; start?: string; duration?: number }): Promise<Task>;
   deleteTask(id: string): Promise<void>;
   createNote(input: { date: string; text: string }): Promise<StickyNote>;
   updateNote(id: string, input: { text: string }): Promise<StickyNote>;
@@ -58,8 +58,8 @@ interface CalendarDataSource {
 | `GET` | `/api/calendar/events?from=2026-11-02&to=2026-11-08` | 返回 `{ events: CalendarEvent[] }` |
 | `GET` | `/api/calendar/notes?date=2026-11-06` | 返回 `{ notes: StickyNote[] }` |
 | `GET` | `/api/calendar/tasks` | 返回 `{ tasks: Task[] }`（未排期 Inbox） |
-| `POST` | `/api/calendar/tasks` | body `{ "title": "整理桌面" }`，返回 `{ task: Task }` |
-| `PATCH` | `/api/calendar/tasks/:id` | body `{ "status": "partial" }` 或 `{ "title": "..." }`，返回 `{ task: Task }` |
+| `POST` | `/api/calendar/tasks` | body `{ "title": "整理桌面" }` 或 `{ "title": "写方案", "date": "2026-11-06", "start": "09:30", "duration": 45 }`，返回 `{ task: Task }` |
+| `PATCH` | `/api/calendar/tasks/:id` | body `{ "status": "partial" }`、`{ "title": "..." }` 或时间字段；清空时间用 `{ "start": "", "duration": "" }`，返回 `{ task: Task }` |
 | `DELETE` | `/api/calendar/tasks/:id` | 删除任务 |
 | `POST` | `/api/calendar/notes` | body `{ "date": "2026-11-06", "text": "..." }`，返回 `{ note: StickyNote }` |
 | `PATCH` | `/api/calendar/notes/:id` | body `{ "text": "..." }`，返回 `{ note: StickyNote }` |
@@ -131,7 +131,7 @@ interface CalendarDataSource {
 - 任务状态更新建议乐观更新：先改 UI，再提交 `PATCH`；失败时回滚并播报错误。
 - 清单 / 便签的新增与修改建议先在 store 内改 UI，再提交请求；失败时回滚到提交前的快照，并把错误写回对应表单的 `role="alert"` 区域。
 - 删除目前是“两步确认 + 立即删除”；接入后端后建议改为可撤销删除，或在服务端保留回收站。
-- 校验规则与前端保持一致：任务标题 1–80 字符、便签 1–200 字符；服务端仍需重复校验。
+- 校验规则与前端保持一致：任务标题 1–80 字符、便签 1–200 字符；开始 07:00–20:59、持续 5–720 分钟、结束不晚于 21:00；服务端仍需重复校验。
 - 范围请求只取当前视图所需区间（月视图覆盖 6 × 7 天，周视图覆盖 7 天，日视图取当天）。
 - 刷新后以服务端为准；本地只保留临时 UI 状态。
 
@@ -140,9 +140,9 @@ interface CalendarDataSource {
 当前 `src/app.js` 创建一份 `createInboxStore({ tasks, notes })`，在日视图挂载时以 `services.inbox` 传给模块。接入后端时有两种方式：
 
 1. 保持 store 作为乐观更新缓存，由 store 方法在写内存后调用数据源；失败时回滚并抛出带 `code` 的错误。
-2. 用数据源实现同一组 `services.inbox` 方法，模块无需改动；注意保持 `listTasks()` / `listNotes()` 的同步读取语义，或先改造模块支持异步。
+2. 用数据源实现同一组 `services.inbox` 方法，模块无需改动；注意保持 `listTasks()` / `listNotes()` / `listCalendarEvents()` 的同步读取语义，或先改造模块支持异步。
 
-store 接口、校验与错误码见 `docs/interfaces.md` 3.3。
+store 接口、校验与错误码见 `docs/interfaces.md` 3.3。定时任务写入后，`src/app.js` 的 `inbox.subscribe` 会局部刷新日视图时间表；接入异步数据源时，刷新前需先完成任务列表更新，避免时间表短暂使用旧快照。
 
 ## 3. 新增模块
 

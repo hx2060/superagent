@@ -273,6 +273,7 @@ function renderDayTimeline(dayEvents) {
     );
   }
 
+  const layouts = layoutOverlaps(dayEvents);
   const items = dayEvents
     .map((event) => {
       const start = timeToMinutes(event.start);
@@ -284,10 +285,19 @@ function renderDayTimeline(dayEvents) {
 
       const top = toPercent(visibleStart);
       const height = ((visibleEnd - visibleStart) / totalMinutes) * 100;
+      const layout = layouts.get(event.id) ?? { column: 0, columns: 1 };
+      const columns = Math.max(1, layout.columns);
+      const column = Math.min(Math.max(0, layout.column), columns - 1);
+      const fraction = column / columns;
+      const copyPosition =
+        columns > 1
+          ? `left:calc(${fraction * 100}% + ${56 - fraction * 64}px);width:calc(${100 / columns}% - ${64 / columns + 8}px);right:auto;`
+          : '';
+
       return `<div class="day-event day-pill day-pill--${event.color}" style="top:${top}%;height:${height}%">
           <span class="day-pill-icon">${eventIcon(event.icon)}</span>
         </div>
-        <div class="day-event-copy" style="top:${top}%">
+        <div class="day-event-copy" data-column="${column}" data-columns="${columns}" style="top:${top}%;${copyPosition}">
           <span class="day-event-title">${escapeHtml(event.title)}</span>
           <span class="day-event-time">${formatTimeRange(event.start, event.end)} · ${formatDuration(end - start)}</span>
           ${event.note ? `<span class="day-event-note">${escapeHtml(event.note)}</span>` : ''}
@@ -320,20 +330,37 @@ function renderDayTimeline(dayEvents) {
   </div>`;
 }
 
-function renderDay() {
-  const dayEvents = eventsForDay(sampleEvents, state.anchor);
+function dayEventsFor(anchor) {
+  const dateKey = toDateKey(anchor);
+  return [
+    ...eventsForDay(sampleEvents, anchor),
+    ...inbox.listCalendarEvents(dateKey),
+  ].sort((a, b) => timeToMinutes(a.start) - timeToMinutes(b.start));
+}
 
+function renderTimelinePanel(dayEvents) {
+  return `<section class="day-panel day-timeline-panel">
+    <header class="day-panel-head">
+      <h2 class="day-panel-title"><span class="day-dot" aria-hidden="true"></span>时间表</h2>
+      <span class="day-panel-meta">${dayEvents.length} 项安排</span>
+    </header>
+    ${renderDayTimeline(dayEvents)}
+  </section>`;
+}
+
+function refreshDayTimeline() {
+  if (state.view !== 'day') return;
+  const panel = root.querySelector('.day-timeline-panel');
+  if (!panel) return;
+  panel.outerHTML = renderTimelinePanel(dayEventsFor(state.anchor));
+}
+
+function renderDay() {
   return `<div class="day-view">
     ${renderDayWeekStrip()}
     <div class="day-columns">
       <aside class="day-sidebar" data-module-root="inbox"></aside>
-      <section class="day-panel day-timeline-panel">
-        <header class="day-panel-head">
-          <h2 class="day-panel-title"><span class="day-dot" aria-hidden="true"></span>时间表</h2>
-          <span class="day-panel-meta">${dayEvents.length} 项安排</span>
-        </header>
-        ${renderDayTimeline(dayEvents)}
-      </section>
+      ${renderTimelinePanel(dayEventsFor(state.anchor))}
     </div>
   </div>`;
 }
@@ -368,6 +395,10 @@ function render() {
     });
   }
 }
+
+// Scheduled tasks are mirrored into the day timeline. Keep the timeline in
+// sync without remounting the editable sidebar / losing focus.
+inbox.subscribe(refreshDayTimeline);
 
 function setView(view) {
   if (!VIEWS.has(view) || view === state.view) return;

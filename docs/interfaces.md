@@ -1,6 +1,6 @@
 # 日程 · 接口说明
 
-版本：`0.2`（PR #3 主干基线 + 清单 / 便签编辑增量）
+版本：`0.3`（PR #3 主干基线 + 清单 / 便签编辑 + 清单任务时间同步）
 适用范围：当前静态实现、后续模块与后端对接
 
 本文档说明「日程」当前**已经实现**的模块接口、数据契约与 DOM 契约，以及预留的扩展接口。接口变更必须同步修改本文档，并按 `AGENTS.md` 的规则评审。
@@ -58,11 +58,15 @@ interface Task {
   title: string;              // 纯文本
   icon: string;               // emoji 字符，例如 "📝"
   status: TaskStatus;         // 初始状态
+  date?: string;              // 填写时间时存在：YYYY-MM-DD
+  start?: string;             // 可选：HH:mm
+  duration?: number;          // 可选：持续分钟，5–720
+  end?: string;               // 派生字段：start + duration，仅读取
 }
-// 任务属于「未排期 Inbox」，没有 date / start / end；所有日期共享同一份清单。
+// 不填 date / start / duration 时是未排期 Inbox；填写后绑定该日并同步到日视图时间表。
 ```
 
-新增任务时 `status = todo`，`icon` 缺省为 `📝`；新增便签时 `tone` 按当天已有便签数量在 `yellow → pink → blue` 间轮换，`tilt` 同步轮换。
+新增任务时 `status = todo`，`icon` 缺省为 `📝`；新增便签时 `tone` 按当天已有便签数量在 `yellow → pink → blue` 间轮换，`tilt` 同步轮换。时间字段可同时缺省；只要填写其一，就必须同时填写 `start` 和 `duration`，并带合法 `date`。
 
 ### 2.3 不变量
 
@@ -73,6 +77,8 @@ interface Task {
 - 月 / 周视图读取事件；日视图读取事件、当天便签、全局任务。
 - 任务状态切换顺序固定：`todo → partial → done → todo`；完成进度只统计 `done / total`。
 - 清单任务标题 1–80 个字符，便签文本 1–200 个字符；首尾空白会被去掉。
+- 任务时间：`start` 为 07:00–20:59 的 `HH:mm`，`duration` 为 5–720 分钟的整数，结束时间不得晚于 21:00（日视图时间表范围）。
+- 未填时间的任务不绑定日期，仍是全局 Inbox；填写时间后绑定 `date`，日视图时间表按该日派生事件展示。
 - 清单 / 便签的新增、修改、删除只保存在当前页面会话（内存 store），刷新后恢复示例数据。
 
 ### 2.4 示例数据
@@ -129,6 +135,8 @@ interface Task {
 | --- | --- |
 | `createInboxStore({ tasks, notes, idFactory? })` | 创建 store；返回的实例见下表 |
 | `TASK_TITLE_MAX_LENGTH` / `NOTE_TEXT_MAX_LENGTH` | 80 / 200 |
+| `TASK_DURATION_MIN` / `TASK_DURATION_MAX` | 5 / 720 分钟 |
+| `TASK_SCHEDULE_START` / `TASK_SCHEDULE_END` | 07:00 / 21:00 对应分钟数；任务开始时间须落在此范围内 |
 | `DEFAULT_TASK_ICON` | `📝` |
 | `NOTE_TONES` / `NOTE_TILTS` | 便签颜色与倾斜轮换表 |
 | `normalizeTaskTitle` / `normalizeNoteText` | 去空白并校验，非法时抛出带 `code` 的 `Error` |
@@ -137,15 +145,16 @@ store 方法：
 
 | 方法 | 说明 |
 | --- | --- |
-| `listTasks()` | 带当前状态的任务副本，按加入顺序 |
-| `addTask({ title, icon? })` / `updateTask(id, { title?, icon? })` / `deleteTask(id)` | 任务增改删 |
+| `listTasks()` | 带当前状态的任务副本，按加入顺序；定时任务带派生 `end` |
+| `addTask({ title, icon?, date?, start?, duration? })` / `updateTask(id, { title?, icon?, date?, start?, duration? })` / `deleteTask(id)` | 任务增改删；时间字段清空即移出时间表 |
 | `taskStatus(id)` / `setTaskStatus(id, status)` / `cycleTaskStatus(id)` | 三态读取、设置、循环 |
 | `taskProgress()` | `{ total, todo, partial, done, percent }` |
+| `listCalendarEvents(date)` | 把该日定时任务转成时间表事件：`{ id: 'task-event-<id>', title, date, start, end, color: 'teal', icon: 'doc', note: '清单任务 · <状态>' }`；无时间任务不返回 |
 | `listNotes(date?)` | 指定日期（缺省全部）的便签副本 |
 | `addNote({ date, text })` / `updateNote(id, { text? })` / `deleteNote(id)` | 便签增改删 |
 | `subscribe(listener)` | 变更订阅，返回取消函数 |
 
-错误码：`INBOX_TASK_TITLE_INVALID`、`INBOX_NOTE_TEXT_INVALID`、`INBOX_NOTE_DATE_INVALID`、`INBOX_TASK_NOT_FOUND`、`INBOX_NOTE_NOT_FOUND`、`INBOX_TASK_STATUS_INVALID`。
+错误码：`INBOX_TASK_TITLE_INVALID`、`INBOX_NOTE_TEXT_INVALID`、`INBOX_NOTE_DATE_INVALID`、`INBOX_TASK_SCHEDULE_INVALID`、`INBOX_TASK_NOT_FOUND`、`INBOX_NOTE_NOT_FOUND`、`INBOX_TASK_STATUS_INVALID`。
 
 ## 4. 页面与 DOM 契约
 
@@ -169,7 +178,7 @@ store 方法：
 | `.view-switch [data-view]` | 月 / 周 / 日切换按钮，`aria-pressed` 表示当前视图 |
 | `[data-action="prev" / "next" / "today"]` | 上一段 / 下一段 / 回到今天 |
 | `[data-open-date="YYYY-MM-DD"]` | 任意日期入口（月格、周表头、日视图周条），点击进入该日的日视图 |
-| `[data-task-row="<id>"]` | 清单任务行，`data-status` 为当前状态 |
+| `[data-task-row="<id>"]` | 清单任务行，`data-status` 为当前状态，`data-scheduled` 表示是否同步到时间表 |
 | `[data-task-toggle="<id>"]` | 状态切换按钮；点击循环三态 |
 | `[data-task-progress-text]` | `done / total 完成` 文本 |
 | `[data-task-progress-fill]` | 完成度进度条宽度 |
@@ -179,6 +188,8 @@ store 方法：
 | `[data-inbox-edit-task="<id>"]` / `[data-inbox-edit-note="<id>"]` | 进入行内编辑 |
 | `[data-inbox-delete-task="<id>"]` / `[data-inbox-delete-note="<id>"]` | 删除；第一次点击变为「确认删除」 |
 | `[data-inbox-task-form="new" \| "<id>"]` / `[data-inbox-note-form="new" \| "<id>"]` | 新增 / 编辑表单 |
+| `[data-inbox-task-add-start]` / `[data-inbox-task-add-duration]` | 新增任务的开始时间 / 持续分钟（可选） |
+| `[data-inbox-task-edit-start]` / `[data-inbox-task-edit-duration]` | 编辑任务的时间字段 |
 | `[data-inbox-note-live]` | 便签面板的 `aria-live="polite"` 播报区域 |
 
 ### 4.3 任务状态 UI 契约
@@ -186,7 +197,7 @@ store 方法：
 - 点击 `[data-task-toggle]` 按 `todo → partial → done → todo` 循环。
 - 行 `data-status`、按钮 `data-status`、状态文案 `待完成 / 部分完成 / 完成`、进度文本与进度条在同一帧更新。
 - 状态变化向 `[data-task-live]` 写入 `「<title>」已标记为<label>`，供读屏器播报。
-- 任务为未排期 Inbox，不绑定日期；事件才绑定日期。
+- 不填时间的任务为未排期 Inbox，不绑定日期；填写时间后绑定日期并同步到该日时间表。
 
 ### 4.4 清单 / 便签编辑 UI 契约
 
@@ -196,6 +207,9 @@ store 方法：
 - 校验失败时表单保持打开，错误信息使用 `role="alert"`；输入框获得焦点。
 - 任务与便签面板的整块内容由模块重绘；`[data-task-row]`、`[data-task-toggle]`、进度选择器与 `[data-task-live]` 在重绘后仍然存在。
 - 便签文本按纯文本渲染，保留换行；列表为空时显示原有空状态。
+- 任务表单的「开始」和「持续（分钟）」均可留空；只填一项会提示错误。填写后行内显示时间，且日视图时间表追加对应事件；清空两项即移出时间表。
+- 新增定时任务使用当前日视图日期；编辑已有定时任务时保留原日期（当前没有改日期入口）。定时任务仍显示在全局清单，只在所属日期的时间表出现。
+- 时间表事件由 `services.inbox.listCalendarEvents(date)` 派生，主干 store 订阅后局部刷新时间表，不重挂侧栏；重叠事件按 `layoutOverlaps` 分列显示。
 
 ## 5. 扩展接口
 
@@ -234,8 +248,8 @@ interface CalendarDataSource {
   listNotes(date: string): Promise<StickyNote[]>;
   listTasks(): Promise<Task[]>;
   updateTaskStatus(id: string, status: TaskStatus): Promise<Task>;
-  createTask(input: { title: string; icon?: string }): Promise<Task>;
-  updateTask(id: string, input: { title?: string; icon?: string }): Promise<Task>;
+  createTask(input: { title: string; icon?: string; date?: string; start?: string; duration?: number }): Promise<Task>;
+  updateTask(id: string, input: { title?: string; icon?: string; date?: string; start?: string; duration?: number }): Promise<Task>;
   deleteTask(id: string): Promise<void>;
   createNote(input: { date: string; text: string }): Promise<StickyNote>;
   updateNote(id: string, input: { text: string }): Promise<StickyNote>;
@@ -247,7 +261,7 @@ interface CalendarDataSource {
 
 ## 6. 版本与兼容
 
-- 当前接口版本 `0.2`；`0.2` 增量加入清单 / 便签编辑模块与 store，已发布的字段与稳定选择器保持不变。
+- 当前接口版本 `0.3`；`0.3` 在 `0.2` 基础上增量加入任务可选时间字段与日视图时间表同步，已发布字段与稳定选择器保持不变。
 - 新增字段必须可选，渲染层对未知可选字段保持忽略。
 - 颜色 / 图标 / 状态枚举新增时，需要同时补样式与回退；删除或重命名属于 breaking change。
 - 破坏性接口变更必须升级版本、更新本文档与 `docs/integration.md`，并在 PR 中明确迁移方案。
