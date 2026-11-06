@@ -50,7 +50,7 @@
   display: flex;
   flex: none;
   align-items: center;
-  gap: 1px;
+  gap: 2px;
   opacity: 0.55;
   transition: opacity 0.15s ease;
 }
@@ -62,9 +62,10 @@
 
 .mod-inbox-icon-btn {
   display: grid;
+  flex: none;
   place-items: center;
-  width: 22px;
-  height: 22px;
+  width: 26px;
+  height: 26px;
   padding: 0;
   border: 0;
   border-radius: 6px;
@@ -86,7 +87,7 @@
 
 .mod-inbox-icon-btn.is-confirming {
   width: auto;
-  min-width: 52px;
+  min-width: 56px;
   padding: 0 5px;
   background: #fdecea;
   color: #d84a43;
@@ -187,7 +188,7 @@
 /* notes editing / adding ----------------------------------------------- */
 
 .mod-inbox-note {
-  padding-top: 25px;
+  padding-top: 32px;
 }
 
 .mod-inbox-note > p {
@@ -197,10 +198,10 @@
 
 .mod-inbox-note-actions {
   position: absolute;
-  top: 5px;
+  top: 6px;
   right: 6px;
   display: flex;
-  gap: 1px;
+  gap: 2px;
 }
 
 .mod-inbox-note .mod-inbox-icon-btn {
