@@ -21,6 +21,7 @@ import {
   toDateKey,
   weekEventStyle,
 } from '../src/calendar.js';
+import { TASK_STATUS_LABELS, nextTaskStatus, taskStatusCounts } from '../src/tasks.js';
 
 const date = (year, month, day) => new Date(year, month - 1, day);
 
@@ -151,4 +152,32 @@ test('weekEventStyle maps times to the rendered hour grid', () => {
 
   const tiny = weekEventStyle({ start: '10:00', end: '10:05' });
   assert.equal(tiny.height, 18);
+});
+
+test('task status cycles todo → partial → done → todo', () => {
+  assert.equal(nextTaskStatus('todo'), 'partial');
+  assert.equal(nextTaskStatus('partial'), 'done');
+  assert.equal(nextTaskStatus('done'), 'todo');
+  assert.equal(nextTaskStatus('unknown'), 'todo');
+  assert.equal(TASK_STATUS_LABELS.partial, '部分完成');
+});
+
+test('task status counts drive the checklist progress', () => {
+  const tasks = [
+    { id: 'a', status: 'done' },
+    { id: 'b', status: 'partial' },
+    { id: 'c', status: 'todo' },
+    { id: 'd', status: 'todo' },
+  ];
+  const statuses = new Map([['c', 'done']]);
+  const counts = taskStatusCounts(tasks, statuses);
+  assert.deepEqual(counts, { total: 4, todo: 1, partial: 1, done: 2, percent: 50 });
+
+  assert.deepEqual(taskStatusCounts([], new Map()), {
+    total: 0,
+    todo: 0,
+    partial: 0,
+    done: 0,
+    percent: 0,
+  });
 });
