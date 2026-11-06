@@ -245,8 +245,8 @@ test('任务：时间字段必须成对填写，且开始、持续、结束需�
   invalid({ start: '09:30' }, '请同时填写开始时间和持续时间');
   invalid({ duration: 30 }, '请同时填写开始时间和持续时间');
   invalid({ start: '25:00', duration: 30 }, '开始时间格式应为 HH:mm');
-  invalid({ start: '06:59', duration: 30 }, '开始时间需在 07:00–21:00 之间');
-  invalid({ start: '20:30', duration: 60 }, '结束时间需在 21:00 前（时间表范围 07:00–21:00）');
+  invalid({ start: '06:59', duration: 30 }, '开始时间需在 07:00–20:59 之间');
+  invalid({ start: '20:30', duration: 60 }, '结束时间不得晚于 21:00（时间表范围 07:00–21:00）');
   invalid({ start: '10:00', duration: 0 }, `持续时间需为 5–720 分钟的整数`);
   invalid({ start: '10:00', duration: 721 }, `持续时间需为 5–720 分钟的整数`);
   invalid({ date: '', start: '10:00', duration: 30 }, '任务日期必须是 YYYY-MM-DD');

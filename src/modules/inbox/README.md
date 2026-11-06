@@ -46,7 +46,7 @@ mountInbox({
 
 校验失败抛出 `Error`，`error.code` 为 `INBOX_TASK_TITLE_INVALID`、`INBOX_NOTE_TEXT_INVALID`、`INBOX_NOTE_DATE_INVALID`、`INBOX_TASK_SCHEDULE_INVALID`、`INBOX_TASK_NOT_FOUND`、`INBOX_NOTE_NOT_FOUND`、`INBOX_TASK_STATUS_INVALID`。
 
-约束：任务标题 1–80 字符，便签 1–200 字符；日期使用 `YYYY-MM-DD`；开始时间 `HH:mm`，范围 07:00–21:00；持续时间为 5–720 分钟整数，且结束时间不晚于 21:00。`start` 与 `duration` 必须成对出现；都不填表示只留在清单。
+约束：任务标题 1–80 字符，便签 1–200 字符；日期使用 `YYYY-MM-DD`；开始时间 `HH:mm`，范围 07:00–20:59；持续时间为 5–720 分钟整数，且结束时间不晚于 21:00。`start` 与 `duration` 必须成对出现；都不填表示只留在清单。
 
 ### `mount(context)`
 

@@ -54,7 +54,7 @@ function normalizeSchedule({ date, start, duration, fallbackDate } = {}) {
     throw invalid('INBOX_TASK_SCHEDULE_INVALID', '开始时间格式应为 HH:mm');
   }
   if (startMinutes < TASK_SCHEDULE_START || startMinutes >= TASK_SCHEDULE_END) {
-    throw invalid('INBOX_TASK_SCHEDULE_INVALID', '开始时间需在 07:00–21:00 之间');
+    throw invalid('INBOX_TASK_SCHEDULE_INVALID', '开始时间需在 07:00–20:59 之间');
   }
 
   const durationMinutes = Number(durationText);
@@ -69,7 +69,7 @@ function normalizeSchedule({ date, start, duration, fallbackDate } = {}) {
     );
   }
   if (startMinutes + durationMinutes > TASK_SCHEDULE_END) {
-    throw invalid('INBOX_TASK_SCHEDULE_INVALID', '结束时间需在 21:00 前（时间表范围 07:00–21:00）');
+    throw invalid('INBOX_TASK_SCHEDULE_INVALID', '结束时间不得晚于 21:00（时间表范围 07:00–21:00）');
   }
 
   const parsedDate = parseDateKey(String(date ?? fallbackDate ?? ''));
