@@ -21,6 +21,24 @@ assets/styles.css  全局与视图样式
 
 当前没有构建步骤和运行时依赖；`app.js` 是唯一入口，负责读取 URL、维护 `state`、渲染视图与处理交互。日视图会额外挂载 `daily-tasks` 与 `inbox` 模块，并分别通过 `services.dailyTasks` / `services.inbox` 共享状态。
 
+### 1.1 接口分层与兼容原则
+
+**稳定接口**（后续模块 / 自动化可依赖）：
+
+- 数据契约：`CalendarEvent`、`StickyNote`、`Task`、`DailyTask` 及枚举；
+- 模块契约：`mount(context)` 的 `context` 形状、返回的 `destroy()` / 可选 `update()`；
+- 共享服务：`services.dailyTasks`、`services.inbox` 的方法与错误码；
+- DOM 契约：本文件 4.2 列出的稳定选择器；
+- URL 参数与 `window.schedule` 的已发布方法。
+
+**内部实现**（不属于稳定接口）：
+
+- `src/app.js` 内部的 `state`、视图变量、渲染函数与事件处理；
+- 模块内部的 DOM 结构、类名、状态变量与 store 实现；
+- 模块之间的直接 import。
+
+兼容原则：新增数据字段必须可选；新增 service 键必须可选；新增选择器使用命名空间并保留既有选择器；模块不得依赖其它模块的内部文件。破坏性变更必须升级接口版本并在 PR 中给出迁移方案。
+
 ## 2. 数据契约
 
 ### 2.1 枚举
@@ -268,49 +286,125 @@ store 方法：
 
 ## 5. 扩展接口
 
-### 5.1 模块契约（daily-tasks / inbox 已落地，其余为预留）
+### 5.1 模块契约
 
-```js
-export function mount(context) {
-  // 只操作 context.root
-  return {
-    update(nextContext) {},
-    destroy() {},
-  };
-}
-```
-
-`context`：
+日视图模块统一导出 `mount(context)`；模块只能操作 `context.root` 内部，通过 `context.services` 读写共享状态。
 
 ```ts
-{
+type ViewKind = 'month' | 'week' | 'day';
+
+interface ModuleContext<Data = unknown, Services = Record<string, unknown>> {
   root: HTMLElement;
-  state: { view: ViewKind; anchor: Date };   // 只读快照
-  data: {
-    events: CalendarEvent[];
-    notes: StickyNote[];
-    tasks: Task[];
-    dailyTasks?: DailyTask[];                 // 每日任务定义快照
-  };
-  services: {
-    dailyTasks?: DailyTasksService;           // 已导出
-    inbox?: InboxService;                     // 已导出
-    [name: string]: unknown;
+  state: Readonly<{ view: ViewKind; anchor: Date }>;
+  data: Readonly<Data>;
+  services: Readonly<Services>;
+}
+
+interface ModuleHandle {
+  update?(nextContext: ModuleContext): void;   // 保留；当前主干在视图切换时 destroy + 重新 mount
+  destroy(): void;
+}
+
+interface ScheduleModule<Data, Services> {
+  mount(context: ModuleContext<Data, Services>): ModuleHandle;
+}
+```
+
+生命周期：
+
+| 阶段 | 调用方 | 要求 |
+| --- | --- | --- |
+| `mount(context)` | `app.js` 日视图渲染后 | 只读写 `root` 内部；在 root 上挂监听；返回 `destroy`；不得改 `state` / `data` / 其它模块 DOM |
+| `update(nextContext)` | 预留 | 可选；当前主干不调用，视图切换会先 `destroy` 再重新 `mount` |
+| `destroy()` | 切换视图 / 重渲染前 | 移除 root 内监听、定时器与订阅；清空 root；不留下全局副作用 |
+
+`data` 是只读快照，可能落后于 service；需要实时数据时调用 `services.*` 的读取方法。`subscribe()` 回调当前是同步触发的；接入异步数据源时需先更新 store，再通知订阅者。
+
+当前模块与注册点：
+
+| 模块 | 日视图槽位 | 共享服务 | 数据快照 | 样式入口 |
+| --- | --- | --- | --- | --- |
+| `daily-tasks` | `<div data-module-root="daily-tasks"></div>` | `services.dailyTasks` | `data.dailyTasks` | `daily-tasks/styles.css` |
+| `inbox` | `<aside class="day-sidebar" data-module-root="inbox"></aside>` | `services.inbox` | `data.notes` / `data.tasks` | `inbox/styles.css` |
+
+`InboxService`（`services.inbox`，与 3.3 方法一致）：
+
+```ts
+interface InboxService {
+  listTasks(): Task[];
+  addTask(input: { title: string; icon?: string; date?: string; start?: string; duration?: number }): Task;
+  updateTask(id: string, input: { title?: string; icon?: string; date?: string; start?: string; duration?: number }): Task;
+  deleteTask(id: string): Task;
+  taskStatus(id: string): TaskStatus;
+  setTaskStatus(id: string, status: TaskStatus): TaskStatus;
+  cycleTaskStatus(id: string): TaskStatus;
+  taskProgress(): { total: number; todo: number; partial: number; done: number; percent: number };
+  listCalendarEvents(date: string): CalendarEvent[];
+  listNotes(date?: string): StickyNote[];
+  addNote(input: { date: string; text: string }): StickyNote;
+  updateNote(id: string, input: { text?: string }): StickyNote;
+  deleteNote(id: string): StickyNote;
+  subscribe(listener: () => void): () => void;
+}
+```
+
+`DailyTasksService`（`services.dailyTasks`，与 3.4 方法一致）：
+
+```ts
+interface DailyTasksService {
+  addTask(input: { id?: string; title: string; icon?: string }): DailyTask;
+  listTasks(): DailyTask[];
+  listForDate(date: string): Array<{ task: DailyTask; status: TaskStatus }>;
+  getStatus(taskId: string, date: string): TaskStatus;
+  setStatus(taskId: string, date: string, status: TaskStatus): TaskStatus;
+  toggleStatus(taskId: string, date: string): TaskStatus;
+  statusCounts(date: string): { total: number; todo: number; partial: number; done: number; percent: number };
+  subscribe(listener: () => void): () => void;
+}
+```
+
+服务错误约定：同步方法非法输入时抛出带 `code` 的 `Error`；成功变更后同步通知 `subscribe` 监听器；返回值是数据副本，调用方不得持有并修改 store 内部对象。
+
+#### 5.1.1 新增一个日视图模块
+
+当前主干的注册是显式的（每个模块一处 import、一处 `mount` / `destroy`、一个槽位、一条样式）：
+
+1. 新建 `src/modules/<name>/{index.js,README.md,styles.css,__tests__/}`。
+2. `index.js` 导出 `mount(context)`，返回 `destroy()`；只操作 `root`，监听器在 `destroy` 中移除。
+3. 需要共享状态时，先提案最小 service：在 `app.js` 创建 store、作为可选键加入 `services`，并在本文档补接口；不需要共享状态时只用 `data` 快照。
+4. 在 `renderDay()` 增加一行模块槽位（如 `<div data-module-root="<name>"></div>`），在 `render()` 中日视图分支 mount、切走时 destroy；不要改其它模块槽位。
+5. 在 `index.html` 增加一行模块样式 `<link>`；类名统一 `.mod-<name>-`。
+6. 补 store / 纯逻辑的 node:test、1440 / 1024 / 768 / 390 截图和本文档更新。
+
+最小模块骨架：
+
+```js
+export function mount({ root, state, data, services }) {
+  function render() {
+    root.innerHTML = `<div class="mod-example">...</div>`;
+  }
+  root.addEventListener('click', onClick);
+  function onClick() {}
+  render();
+  return {
+    update: render,
+    destroy() {
+      root.removeEventListener('click', onClick);
+      root.innerHTML = '';
+    },
   };
 }
 ```
 
-`DailyTasksService` 与 `InboxService` 的方法分别与 3.4 / 3.3 的 store 方法一一对应；两者均由 `src/app.js` 创建唯一实例并注入。
+接入后的检查：
 
-约束见 `AGENTS.md`：模块样式加 `.mod-<name>-` 前缀、不跨模块 import、不直接改全局状态、共享能力走 services。当前注册点：
-
-- 日视图 `renderDay()` 内一行 `<div data-module-root="daily-tasks"></div>`；
-- 日视图 `<aside class="day-sidebar" data-module-root="inbox"></aside>`；
-- `render()` 在日视图挂载 / 其他视图卸载两个模块；
-- `index.html` 分别加载 `daily-tasks/styles.css` 与 `inbox/styles.css`；
-- `app.js` 创建 `services.dailyTasks` 与 `services.inbox`。
-
-后续模块应复用该模式；新增共享能力先提交最小接口提案。
+- [ ] `mount` 只使用 `root` / `state` / `data` / `services`，没有 import `src/app.js` 内部符号。
+- [ ] `destroy()` 移除所有 root / window / document 监听器、定时器和 service 订阅。
+- [ ] 新 service 键为可选；旧模块不认识时不受影响。
+- [ ] 新选择器带 `data-<name>-*` 或稳定命名，不改 4.2 已发布选择器。
+- [ ] 样式命名空间化；不修改全局元素选择器。
+- [ ] `npm test`、三视图、深链、空状态、console error、1440 / 1024 / 768 / 390 横向溢出检查通过。
+- [ ] `docs/interfaces.md` 与 `docs/integration.md` 已更新版本 / 迁移说明。
 
 ### 5.2 数据源契约（建议，尚未实现）
 

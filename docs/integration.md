@@ -190,8 +190,8 @@ src/modules/<name>/
 
 ```js
 export function mount(context) {
-  const { root } = context;
-  root.innerHTML = `<div class="mod-example">...</div>`;
+  const { root, state, data, services } = context;
+  root.innerHTML = `<div class="mod-example">${state.view} / ${data.events.length}</div>`;
 
   return {
     update(nextContext) {
@@ -204,6 +204,8 @@ export function mount(context) {
 }
 ```
 
+`context` 的完整形状、只读约束、生命周期与 service 接口见 `docs/interfaces.md` 5.1；`update` 是可选预留，当前视图切换会先 `destroy` 再重新 `mount`。
+
 ### 3.3 接入步骤
 
 1. 在 Issue / PR 说明功能、数据需求、是否需要 `services`。
@@ -211,7 +213,7 @@ export function mount(context) {
 3. 模块只 import `src/calendar.js`、`src/tasks.js` 等公开纯函数；不 import 其它模块内部文件。
 4. 样式加 `.mod-<name>-` 前缀；不改全局元素选择器。
 5. 补模块单测；涉及 UI 时补 1440 / 1024 / 768 / 390 截图。
-6. 如需在主干挂载，提交“接口登记点”改动：只允许一行注册 + 必要的 `services` 导出，并在 PR 中标注。当前 inbox 模块使用 `<aside class="day-sidebar" data-module-root="inbox">` 与 `services.inbox`；daily-tasks 使用 `<div data-module-root="daily-tasks"></div>` 与 `services.dailyTasks`。
+6. 如需在主干挂载，提交最小登记点：`renderDay()` 槽位、`render()` 的 mount / destroy、需要共享状态时的 `services` 导出、`index.html` 样式入口。当前 inbox 模块使用 `<aside class="day-sidebar" data-module-root="inbox">` 与 `services.inbox`；daily-tasks 使用 `<div data-module-root="daily-tasks"></div>` 与 `services.dailyTasks`。不要改动其它模块槽位。
 7. 更新 `docs/interfaces.md` 与本文档，再请求 review。
 
 ### 3.4 已落地示例：`daily-tasks`
@@ -258,6 +260,62 @@ src/modules/inbox/
 - `src/data.js`：`sampleTasks` / `sampleNotes`（当前为空数组）。
 
 任务时间同步：没有时间字段的任务只留在清单；填写 `start` + `duration` 后绑定日期，`listCalendarEvents(date)` 派生 teal 时间表事件。月 / 周视图暂不展示定时任务；删除为两步确认，刷新后回到空白初始状态。
+
+### 3.6 新模块接入演练（示例）
+
+以一个假设的 `example` 模块为例，完整接入路径如下，确认后续模块不需要改其它模块的内部实现。
+
+`src/modules/example/index.js`：
+
+```js
+export function mount({ root, state, data, services }) {
+  function render() {
+    root.innerHTML = `<div class="mod-example">${state.view}</div>`;
+  }
+  const onClick = () => {};
+  root.addEventListener('click', onClick);
+  render();
+  return {
+    update: render,
+    destroy() {
+      root.removeEventListener('click', onClick);
+      root.innerHTML = '';
+    },
+  };
+}
+```
+
+`src/app.js` 登记（只增加本模块相关行）：
+
+```js
+import { mount as mountExample } from './modules/example/index.js';
+let exampleView = null;
+
+// renderDay(): 在日视图内增加本模块槽位
+// <div data-module-root="example"></div>
+
+// render(): 日视图分支 mount；切走 / 重绘时 destroy
+exampleView = mountExample({
+  root: root.querySelector('[data-module-root="example"]'),
+  state: { view: state.view, anchor: new Date(state.anchor) },
+  data: { events: sampleEvents, notes: inbox.listNotes(toDateKey(state.anchor)), tasks: inbox.listTasks() },
+  services: { inbox },
+});
+```
+
+`index.html`：增加一行 `<link rel="stylesheet" href="./src/modules/example/styles.css" />`（如有样式）。
+补充：模块 README、store / 纯逻辑测试、4 个宽度截图、`docs/interfaces.md` 与本文档。
+
+接口平滑性检查（与 `docs/interfaces.md` 5.1.1 对齐）：
+
+- [ ] `mount` 只依赖 `context`，没有 import `src/app.js` 或其它模块内部文件。
+- [ ] `destroy` 移除 root / window / document 监听器、定时器与 service 订阅。
+- [ ] 新 service 是可选键，旧模块不受影响；错误码、同步 / 异步语义写进文档。
+- [ ] 新槽位 / 选择器带模块命名空间，既有稳定选择器保持不变。
+- [ ] 空白启动、三视图、深链、空状态、console error、1440 / 1024 / 768 / 390 无横向溢出。
+- [ ] 文档版本与迁移说明已更新。
+
+当前主干仍是显式登记（app.js 中每个模块一组 import / mount / destroy / 槽位），没有自动注册器；新增模块按上述模式复制最小登记点即可。若后续模块数量继续增加，再单独提案通用注册器，避免在本 PR 中引入框架。
 
 ## 4. 本地与公网预览
 
