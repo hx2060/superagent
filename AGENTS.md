@@ -8,7 +8,7 @@
 
 - 月 / 周 / 天三种视图与日期导航、视图切换、键盘快捷键、`?view=&date=` 深链。
 - 日视图：周条、时间表、便签、任务清单，任务支持 `待完成 / 部分完成 / 完成` 三态切换。
-- 示例数据驱动，无后端、无持久化。
+- 空白数据启动（示例内容已清空，通过 UI 新增），无后端、无持久化。
 
 **主干文件**：
 
@@ -18,7 +18,7 @@ assets/styles.css             全局与三视图样式
 src/app.js                    应用控制器、视图分发、交互
 src/calendar.js               纯日期 / 布局逻辑
 src/tasks.js                  任务三态与进度统计
-src/data.js                   当前静态示例数据
+src/data.js                   空白种子数据（首次加载无示例内容）
 docs/interfaces.md            接口说明
 docs/integration.md           对接文档
 ```
@@ -63,8 +63,8 @@ export function mount(context) {
 - 模块只依赖 `context` 和公开的纯函数（`src/calendar.js`、`src/tasks.js`）；不得 import 另一个模块的内部文件。
 - 模块不得直接修改全局状态或其它模块的 DOM；共享状态通过 `services` 或数据快照传递。
 - 模块样式必须命名空间化，禁止修改全局 `button`、`div` 等选择器。
-- `services` 由主干按模块提案逐步导出；当前已导出 `services.dailyTasks`（每日任务模块）。新模块需要共享能力时先提交最小接口提案，不能直接 `import` `src/app.js` 的内部符号。
-- 新视图 / 新模块在主干的注册点只允许是一行注册改动；注册改动需在 PR 中标注为“接口登记点”，并附接口文档更新。
+- `services` 由主干按模块提案逐步导出；当前已导出 `services.dailyTasks` 与 `services.inbox`。新模块需要共享能力时先提交最小接口提案，不能直接 `import` `src/app.js` 的内部符号。
+- 新视图 / 新模块在主干的注册点保持最小：日视图槽位、`mount` / `destroy` 生命周期、必要的 `services` 导出与样式入口；注册改动需在 PR 中标注为“接口登记点”，并附接口文档更新。
 - 模块必须自测，并在 PR 中给出 1440 / 1024 / 768 / 390 宽度下的截图或说明。
 
 ## 3. 接口与数据契约
@@ -73,7 +73,7 @@ export function mount(context) {
 - 后端 / 外部系统接入方式记录在 `docs/integration.md`。
 - 数据模型只做**增量**变更：新增字段必须可选；不得重命名或删除已发布字段，除非显式升级接口版本并在 PR 中说明迁移方案。
 - 任务状态枚举固定为 `todo | partial | done`，中文展示为 `待完成 / 部分完成 / 完成`；状态循环顺序固定为 `todo → partial → done → todo`。
-- 任务清单是**未排期 Inbox**，不绑定日期；时间表事件才绑定日期与起止时间。
+- 任务清单默认是**未排期 Inbox**，不绑定日期；任务填写可选开始时间与持续分钟后绑定该日，并同步到日视图时间表。时间表事件与定时任务都绑定日期与起止时间。
 - 示例数据不得包含真实用户隐私、飞书私有内容、凭据或 token。
 
 ## 4. 合并流程
@@ -105,4 +105,5 @@ export function mount(context) {
 - **每日任务**：`src/modules/daily-tasks/`；日视图通过 `[data-module-root="daily-tasks"]` 接入，共享状态走 `services.dailyTasks`，dsh 输入见 `docs/interfaces.md` 的 `window.schedule.dailyTasks` 与 `sampleDailyTasks`。
 - **新视图**：按模块契约新增；注册点改动需评审。
 - **任务状态持久化**：由数据源 / services 提供，不在 UI 模块内散落存储逻辑。
-- **日程 / 便签 CRUD、提醒、协作、多日历、时区**：当前范围外；需要需求方明确立项后再做。
+- **清单 / 便签 CRUD**：已由 `src/modules/inbox` 提供（新增、修改、删除；页面会话内有效，无持久化）；清单任务可选时间并同步到日视图时间表。持久化仍由数据源 / services 提供。
+- **日程 CRUD、提醒、协作、多日历、时区**：当前范围外；需要需求方明确立项后再做。

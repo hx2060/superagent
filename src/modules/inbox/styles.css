@@ -1,0 +1,333 @@
+/* Inbox module: editing controls for the day view's 清单 and 便签 panels.
+   All new selectors are namespaced with .mod-inbox-; the panels reuse the
+   trunk's .day-panel / .day-task / .day-note presentation classes. */
+
+.mod-inbox-panel {
+  position: relative;
+}
+
+/* The task panel grows with its list and add form instead of clipping them;
+   the day view itself scrolls when the sidebar gets taller. */
+.mod-inbox-tasks {
+  flex: 1 0 auto;
+}
+
+.mod-inbox-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.mod-inbox-add {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px dashed #e3c1ba;
+  border-radius: 8px;
+  background: #fffdfb;
+  color: #b98a7e;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+
+.mod-inbox-add:hover {
+  border-color: var(--d-coral-deep);
+  background: #fff7f4;
+  color: var(--d-coral-deep);
+}
+
+.mod-inbox-add[aria-expanded="true"] {
+  border-style: solid;
+  border-color: var(--d-coral-deep);
+  background: #fdeeea;
+  color: var(--d-coral-deep);
+}
+
+.mod-inbox-actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 2px;
+  opacity: 0.55;
+  transition: opacity 0.15s ease;
+}
+
+.day-task:hover .mod-inbox-actions,
+.day-task:focus-within .mod-inbox-actions {
+  opacity: 1;
+}
+
+.mod-inbox-icon-btn {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #b39b94;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.mod-inbox-icon-btn:hover {
+  background: #f7e9e5;
+  color: #8d6f67;
+}
+
+.mod-inbox-icon-btn--danger:hover {
+  background: #fdecea;
+  color: #d84a43;
+}
+
+.mod-inbox-icon-btn.is-confirming {
+  width: auto;
+  min-width: 56px;
+  padding: 0 5px;
+  background: #fdecea;
+  color: #d84a43;
+  font-size: 10px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* task editing / adding ------------------------------------------------ */
+
+.mod-inbox-task.is-editing {
+  display: block;
+  padding: 8px 3px;
+}
+
+.mod-inbox-task-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.mod-inbox-task-form--new {
+  margin: 8px 3px 0;
+  padding: 9px;
+  border: 1px dashed #eed6cf;
+  border-radius: 10px;
+  background: #fffaf7;
+}
+
+.mod-inbox-input,
+.mod-inbox-time-input,
+.mod-inbox-duration-input,
+.mod-inbox-textarea {
+  width: 100%;
+  padding: 7px 9px;
+  border: 1px solid #eccfc8;
+  border-radius: 9px;
+  background: #fffdfb;
+  color: #2b211e;
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.mod-inbox-input:focus,
+.mod-inbox-textarea:focus {
+  border-color: var(--d-coral-deep);
+  outline: 2px solid rgba(216, 110, 100, 0.22);
+  outline-offset: 1px;
+}
+
+.mod-inbox-textarea {
+  min-height: 64px;
+  resize: vertical;
+  line-height: 1.65;
+}
+
+.mod-inbox-time-fields {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.mod-inbox-time-field {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.mod-inbox-time-field:first-child {
+  flex: 0 0 108px;
+}
+
+.mod-inbox-time-field:last-child {
+  flex: 1;
+}
+
+.mod-inbox-time-label {
+  color: #a58c86;
+  font-size: 9.5px;
+  letter-spacing: 0.02em;
+}
+
+.mod-inbox-duration-wrap {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.mod-inbox-duration-input {
+  width: 62px;
+}
+
+.mod-inbox-time-unit {
+  flex: none;
+  color: #a58c86;
+  font-size: 9.5px;
+}
+
+.mod-inbox-form-hint {
+  margin: -2px 0 0;
+  color: #b39b94;
+  font-size: 9.5px;
+  line-height: 1.4;
+}
+
+.mod-inbox-task-when {
+  overflow: hidden;
+  color: #0f9b8e;
+  font-size: 9.5px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mod-inbox-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.mod-inbox-primary {
+  padding: 4px 12px;
+  border: 0;
+  border-radius: 7px;
+  background: var(--d-coral-deep);
+  color: #fff;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.mod-inbox-primary:hover {
+  background: #c96157;
+}
+
+.mod-inbox-secondary {
+  padding: 4px 10px;
+  border: 1px solid #ead2cb;
+  border-radius: 7px;
+  background: transparent;
+  color: #9a817b;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.mod-inbox-secondary:hover {
+  border-color: #dcb8ae;
+  color: #7d615a;
+}
+
+.mod-inbox-error {
+  margin: 0;
+  color: #c0392b;
+  font-size: 10.5px;
+  line-height: 1.45;
+}
+
+/* notes editing / adding ----------------------------------------------- */
+
+.mod-inbox-note {
+  padding-top: 32px;
+}
+
+.mod-inbox-note > p {
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.mod-inbox-note-actions {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: flex;
+  gap: 2px;
+}
+
+.mod-inbox-note .mod-inbox-icon-btn {
+  color: rgba(90, 70, 48, 0.55);
+}
+
+.mod-inbox-note .mod-inbox-icon-btn:hover {
+  background: rgba(255, 255, 255, 0.55);
+  color: #5a4630;
+}
+
+.mod-inbox-note .mod-inbox-icon-btn--danger:hover {
+  background: rgba(255, 255, 255, 0.72);
+  color: #c0392b;
+}
+
+.mod-inbox-note.is-editing {
+  padding: 12px 12px 9px;
+}
+
+.mod-inbox-note-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.mod-inbox-note-form--new {
+  margin-top: 11px;
+  padding: 10px;
+  border: 1px dashed rgba(150, 100, 60, 0.3);
+  border-radius: 12px;
+  background: rgba(255, 253, 251, 0.72);
+}
+
+.mod-inbox-note .mod-inbox-textarea,
+.mod-inbox-note-form--new .mod-inbox-textarea {
+  border-color: rgba(150, 100, 60, 0.25);
+  background: rgba(255, 255, 255, 0.62);
+  color: #5a4630;
+}
+
+.mod-inbox-note .mod-inbox-secondary {
+  border-color: rgba(150, 100, 60, 0.28);
+  color: #7c6247;
+}
+
+.mod-inbox-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (max-width: 640px) {
+  .mod-inbox-actions {
+    opacity: 0.75;
+  }
+
+  .mod-inbox-add {
+    width: 28px;
+    height: 28px;
+  }
+}
