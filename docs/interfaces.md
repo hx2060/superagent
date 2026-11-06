@@ -359,11 +359,11 @@ interface DailyTasksService {
   setStatus(taskId: string, date: string, status: TaskStatus): TaskStatus;
   toggleStatus(taskId: string, date: string): TaskStatus;
   statusCounts(date: string): { total: number; todo: number; partial: number; done: number; percent: number };
-  subscribe(listener: () => void): () => void;
+  subscribe(listener: (change: object) => void): () => void;
 }
 ```
 
-服务错误约定：同步方法非法输入时抛出带 `code` 的 `Error`；成功变更后同步通知 `subscribe` 监听器；返回值是数据副本，调用方不得持有并修改 store 内部对象。
+服务错误约定：同步方法非法输入时抛出带 `code` 的 `Error`；成功变更后同步通知 `subscribe` 监听器；返回值是数据副本，调用方不得持有并修改 store 内部对象。`services.inbox.subscribe` 的回调没有参数；`services.dailyTasks.subscribe` 的回调接收一个 `change` 对象（当前实现用于通知变更，订阅方不应依赖未写入契约的字段）。
 
 #### 5.1.1 新增一个日视图模块
 
