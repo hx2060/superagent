@@ -8,6 +8,7 @@ import {
   buildMonthMatrix,
   eventsForDay,
   formatDayTitle,
+  formatDuration,
   formatMonthTitle,
   formatTimeRange,
   formatWeekTitle,
@@ -34,6 +35,13 @@ const state = {
 };
 
 const taskStatuses = new Map(sampleTasks.map((task) => [task.id, task.status]));
+
+const EVENT_DOT_COLORS = {
+  blue: '#3370ff',
+  teal: '#0f9b8e',
+  orange: '#e07800',
+  violet: '#7b5cf0',
+};
 
 const root = document.querySelector('#view-root');
 const periodTitle = document.querySelector('#period-title');
@@ -220,10 +228,6 @@ function notesForDay(date) {
   return sampleNotes.filter((note) => note.date === toDateKey(date));
 }
 
-function tasksForDay(date) {
-  return sampleTasks.filter((task) => task.date === toDateKey(date));
-}
-
 function renderNote(note) {
   return `<article class="day-note day-note--${note.tone}" style="--tilt:${note.tilt ?? 0}deg">
     <p>${escapeHtml(note.text)}</p>
@@ -239,6 +243,11 @@ function renderTask(task) {
   const status = statusOf(task);
   const label = TASK_STATUS_LABELS[status];
   return `<li class="day-task" data-task-row="${task.id}" data-status="${status}">
+    <span class="task-emoji" aria-hidden="true">${task.icon}</span>
+    <span class="task-body">
+      <span class="task-title">${escapeHtml(task.title)}</span>
+      <span class="task-status-label">${label}</span>
+    </span>
     <button
       type="button"
       class="task-check"
@@ -249,12 +258,42 @@ function renderTask(task) {
     >
       <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3.2 8.4 3 3 6.6-7"/></svg>
     </button>
-    <span class="task-emoji" aria-hidden="true">${task.icon}</span>
-    <span class="task-body">
-      <span class="task-title">${escapeHtml(task.title)}</span>
-      <span class="task-status-label">${label}</span>
-    </span>
   </li>`;
+}
+
+function renderDayWeekStrip() {
+  const days = getWeekDays(state.anchor);
+  const grouped = groupEventsByDate(sampleEvents);
+
+  const weekRange = formatWeekTitle(state.anchor).replace(/^\d{4}年/, '');
+
+  return `<div class="day-weekstrip" role="group" aria-label="本周日期">
+    <span class="day-strip-caption">本周</span>
+    <span class="day-strip-range">${weekRange}</span>
+    ${days
+      .map((date) => {
+        const key = toDateKey(date);
+        const events = grouped.get(key) ?? [];
+        const selected = isSameDay(date, state.anchor);
+        const isToday = isSameDay(date, today);
+        const dots = events
+          .slice(0, 4)
+          .map((event) => `<span class="day-strip-dot" style="background:${EVENT_DOT_COLORS[event.color] ?? '#3370ff'}"></span>`)
+          .join('');
+        return `<button
+          type="button"
+          class="day-strip-day${selected ? ' is-selected' : ''}${isToday ? ' is-today' : ''}"
+          data-open-date="${key}"
+          aria-label="${date.getMonth() + 1}月${date.getDate()}日，${events.length} 项日程，查看当日"
+          ${selected ? 'aria-current="date"' : ''}
+        >
+          <span class="day-strip-name">周${WEEKDAY_LABELS[(date.getDay() + 6) % 7]}</span>
+          <span class="day-strip-num">${date.getDate()}</span>
+          <span class="day-strip-dots">${dots}</span>
+        </button>`;
+      })
+      .join('')}
+  </div>`;
 }
 
 function renderDayTimeline(dayEvents) {
@@ -263,18 +302,14 @@ function renderDayTimeline(dayEvents) {
   const totalMinutes = endMinutes - startMinutes;
   const toPercent = (minutes) => ((minutes - startMinutes) / totalMinutes) * 100;
 
-  const hours = Array.from(
-    { length: WEEK_GRID_END_HOUR - WEEK_GRID_START_HOUR },
-    (_, index) => WEEK_GRID_START_HOUR + index
-  );
+  const axis = [];
+  for (let hour = 8; hour <= 20; hour += 2) {
+    axis.push(
+      `<span class="day-axis-label" style="top:${toPercent(hour * 60)}%">${String(hour).padStart(2, '0')}:00</span>`
+    );
+  }
 
-  const axis = hours
-    .map((hour) => `<div class="day-axis-slot"><span>${String(hour).padStart(2, '0')}:00</span></div>`)
-    .join('');
-
-  const hourRows = hours.map(() => '<div class="day-hour"></div>').join('');
-
-  const blocks = dayEvents
+  const items = dayEvents
     .map((event) => {
       const start = timeToMinutes(event.start);
       const end = timeToMinutes(event.end);
@@ -282,15 +317,17 @@ function renderDayTimeline(dayEvents) {
       const visibleStart = Math.max(start, startMinutes);
       const visibleEnd = Math.min(end, endMinutes);
       if (visibleEnd <= visibleStart) return '';
-      const compact = end - start < 45;
-      return `<div
-        class="day-event day-event--${event.color}${compact ? ' is-compact' : ''}"
-        style="top:${toPercent(visibleStart)}%;height:${((visibleEnd - visibleStart) / totalMinutes) * 100}%"
-      >
-        <span class="day-event-icon">${eventIcon(event.icon)}</span>
-        <span class="day-event-title">${escapeHtml(event.title)}</span>
-        <span class="day-event-time">${compact ? event.start : formatTimeRange(event.start, event.end)}</span>
-      </div>`;
+
+      const top = toPercent(visibleStart);
+      const height = ((visibleEnd - visibleStart) / totalMinutes) * 100;
+      return `<div class="day-event day-pill day-pill--${event.color}" style="top:${top}%;height:${height}%">
+          <span class="day-pill-icon">${eventIcon(event.icon)}</span>
+        </div>
+        <div class="day-event-copy" style="top:${top}%">
+          <span class="day-event-title">${escapeHtml(event.title)}</span>
+          <span class="day-event-time">${formatTimeRange(event.start, event.end)} · ${formatDuration(end - start)}</span>
+          ${event.note ? `<span class="day-event-note">${escapeHtml(event.note)}</span>` : ''}
+        </div>`;
     })
     .join('');
 
@@ -303,17 +340,18 @@ function renderDayTimeline(dayEvents) {
 
   const empty =
     dayEvents.length === 0
-      ? `<div class="day-timeline-empty"><span class="day-timeline-empty-icon">☀️</span><p>这一天还没有时间安排</p><small>把不定时的事放进右侧清单</small></div>`
+      ? `<div class="day-timeline-empty"><span class="day-timeline-empty-icon">☀️</span><p>这一天还没有时间安排</p><small>把不定时的事放进清单</small></div>`
       : '';
 
   return `<div class="day-timeline">
-    <div class="day-axis">${axis}</div>
-    <div class="day-grid">
-      <div class="day-hours">${hourRows}</div>
-      <div class="day-guide"></div>
-      ${blocks}
-      ${nowLine}
-      ${empty}
+    <div class="day-timeline-inner">
+      <div class="day-axis" aria-hidden="true">${axis.join('')}</div>
+      <div class="day-track">
+        ${dayEvents.length ? '<div class="day-guide" aria-hidden="true"></div>' : ''}
+        ${items}
+        ${nowLine}
+        ${empty}
+      </div>
     </div>
   </div>`;
 }
@@ -321,7 +359,7 @@ function renderDayTimeline(dayEvents) {
 function renderDay() {
   const dayEvents = eventsForDay(sampleEvents, state.anchor);
   const dayNotes = notesForDay(state.anchor);
-  const dayTasks = tasksForDay(state.anchor);
+  const dayTasks = sampleTasks;
   const counts = taskStatusCounts(dayTasks, taskStatuses);
 
   const notes = dayNotes.length
@@ -333,22 +371,9 @@ function renderDay() {
     : '<div class="day-empty">这一天还没有清单任务</div>';
 
   return `<div class="day-view">
+    ${renderDayWeekStrip()}
     <div class="day-columns">
-      <section class="day-panel day-timeline-panel">
-        <header class="day-panel-head">
-          <h2 class="day-panel-title"><span class="day-dot" aria-hidden="true"></span>时间表</h2>
-          <span class="day-panel-meta">${dayEvents.length} 项安排</span>
-        </header>
-        ${renderDayTimeline(dayEvents)}
-      </section>
-      <aside class="day-side">
-        <section class="day-panel day-notes-panel">
-          <header class="day-panel-head">
-            <h2 class="day-panel-title"><span class="day-dot day-dot--butter" aria-hidden="true"></span>便签</h2>
-            <span class="day-panel-meta">${dayNotes.length} 条</span>
-          </header>
-          ${notes}
-        </section>
+      <aside class="day-sidebar">
         <section class="day-panel day-tasks-panel">
           <header class="day-panel-head">
             <h2 class="day-panel-title"><span class="day-dot day-dot--green" aria-hidden="true"></span>清单</h2>
@@ -358,11 +383,25 @@ function renderDay() {
             </div>
           </header>
           ${tasks}
-          <p class="day-task-hint">点击左侧圆点切换：待完成 → 部分完成 → 完成</p>
+          <p class="day-task-hint">点击右侧圆点切换：待完成 → 部分完成 → 完成</p>
         </section>
-        <p class="sr-only" aria-live="polite" data-task-live></p>
+        <section class="day-panel day-notes-panel">
+          <header class="day-panel-head">
+            <h2 class="day-panel-title"><span class="day-dot day-dot--butter" aria-hidden="true"></span>便签</h2>
+            <span class="day-panel-meta">${dayNotes.length} 条</span>
+          </header>
+          ${notes}
+        </section>
       </aside>
+      <section class="day-panel day-timeline-panel">
+        <header class="day-panel-head">
+          <h2 class="day-panel-title"><span class="day-dot" aria-hidden="true"></span>时间表</h2>
+          <span class="day-panel-meta">${dayEvents.length} 项安排</span>
+        </header>
+        ${renderDayTimeline(dayEvents)}
+      </section>
     </div>
+    <p class="sr-only" aria-live="polite" data-task-live></p>
   </div>`;
 }
 
@@ -391,7 +430,7 @@ function updateTaskState(taskId) {
   const live = root.querySelector('[data-task-live]');
   if (live) live.textContent = `「${task.title}」已标记为${TASK_STATUS_LABELS[next]}`;
 
-  const counts = taskStatusCounts(tasksForDay(state.anchor), taskStatuses);
+  const counts = taskStatusCounts(sampleTasks, taskStatuses);
   const progressText = root.querySelector('[data-task-progress-text]');
   if (progressText) progressText.textContent = `${counts.done} / ${counts.total} 完成`;
   const fill = root.querySelector('[data-task-progress-fill]');

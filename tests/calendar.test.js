@@ -8,6 +8,7 @@ import {
   buildMonthMatrix,
   eventsForDay,
   formatDayTitle,
+  formatDuration,
   formatMonthTitle,
   formatTimeRange,
   formatWeekTitle,
@@ -79,6 +80,14 @@ test('period titles read naturally in Chinese', () => {
   assert.equal(formatWeekTitle(date(2025, 12, 31)), '2025年12月29日 – 2026年1月4日');
   assert.equal(formatDayTitle(date(2026, 11, 6)), '2026年11月6日 周五');
   assert.equal(formatTimeRange('09:30', '10:00'), '09:30 – 10:00');
+});
+
+test('formatDuration renders human durations', () => {
+  assert.equal(formatDuration(15), '15 分钟');
+  assert.equal(formatDuration(60), '1 小时');
+  assert.equal(formatDuration(90), '1 小时 30 分钟');
+  assert.equal(formatDuration(0), '');
+  assert.equal(formatDuration(Number.NaN), '');
 });
 
 test('timeToMinutes parses and validates clock strings', () => {

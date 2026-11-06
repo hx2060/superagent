@@ -103,6 +103,14 @@ export function formatTimeRange(start, end) {
   return `${start} – ${end}`;
 }
 
+export function formatDuration(minutes) {
+  if (!Number.isFinite(minutes) || minutes <= 0) return '';
+  if (minutes < 60) return `${minutes} 分钟`;
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  return rest === 0 ? `${hours} 小时` : `${hours} 小时 ${rest} 分钟`;
+}
+
 /** "09:30" -> 570. Returns NaN for malformed input. */
 export function timeToMinutes(value) {
   const match = /^(\d{1,2}):(\d{2})$/.exec(value ?? '');
