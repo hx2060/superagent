@@ -44,3 +44,15 @@ export const sampleTasks = [
   { id: 'task-04', title: '读 20 页《设计心理学》', icon: '📖', status: 'todo' },
   { id: 'task-05', title: '预约下周体检', icon: '🩺', status: 'todo' },
 ];
+
+/**
+ * Daily recurring task definitions. Unlike `sampleTasks` (an undated Inbox),
+ * these reappear every day; completion is tracked per local date by the
+ * daily-tasks module. `dsh` can append entries here, or use the runtime
+ * `window.schedule.dailyTasks` interface documented in docs/interfaces.md.
+ */
+export const sampleDailyTasks = [
+  { id: 'daily-01', title: '喝够 8 杯水', icon: '💧' },
+  { id: 'daily-02', title: '阅读 20 分钟', icon: '📖' },
+  { id: 'daily-03', title: '拉伸 10 分钟', icon: '🧘' },
+];
