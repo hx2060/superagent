@@ -12,9 +12,11 @@ npm start                 # 本地静态服务，默认 http://127.0.0.1:4173
 ```
 
 - 入口：`index.html` → `src/app.js`。
-- 数据：`src/data.js` 的 `sampleEvents` / `sampleNotes` / `sampleTasks`，当前均为空数组，首次加载为空白日历。
-- 状态：视图、锚点日期、清单 / 便签都在页面内存中（`src/modules/inbox/store.js`）；刷新后恢复空白初始状态。
-- 清单 / 便签的增删改由 `src/modules/inbox` 负责，store 通过 `services.inbox` 注入；清单任务可选时间会在日视图时间表派生事件；目前没有持久化。
+- 数据：`src/data.js` 的 `sampleEvents` / `sampleNotes` / `sampleTasks` / `sampleDailyTasks`，当前均为空数组，首次加载为空白日历。
+- 状态：视图、锚点日期、清单 / 便签、每日任务定义与按日状态都在页面内存中；刷新后恢复空白初始状态。
+- 清单 / 便签的增删改由 `src/modules/inbox` 负责，store 通过 `services.inbox` 注入；清单任务可选时间会在日视图时间表派生事件。
+- 每日任务：日视图顶部由 `src/modules/daily-tasks/` 模块渲染；定义来自 `sampleDailyTasks`，按日完成状态由 `services.dailyTasks` 保存。dsh 运行时接口为 `window.schedule.dailyTasks`。
+- 目前没有持久化。
 - 没有构建步骤、没有运行时依赖、没有网络请求。
 
 URL 参数：
@@ -32,6 +34,8 @@ URL 参数：
 1. **推荐**：先提案一个最小数据接入点（属于主干变更，按 `AGENTS.md` 评审），用 `CalendarDataSource` 替换静态 import；保持视图模块只消费数据快照。
 2. **不改主干**：新增一个模块，由模块自行取数并渲染自己的区域；但模块不能直接改写月 / 周 / 日主干的渲染逻辑。
 
+每日任务目前采用第 2 种思路的折中：`src/modules/daily-tasks/` 自己管理 store 和 UI，主干只保留一个日视图槽位和 `services.dailyTasks` 最小接口；数据定义仍从 `src/data.js` 的 `sampleDailyTasks` 同步读取。接真实后端时，优先把 store 替换为异步数据源，保持模块的 DOM / 调用契约不变。
+
 不要在视图渲染函数里直接 `fetch`；数据获取、缓存与错误处理应集中在数据源 / 模块内。
 
 ### 2.2 建议的数据源契约
@@ -48,6 +52,9 @@ interface CalendarDataSource {
   createNote(input: { date: string; text: string }): Promise<StickyNote>;
   updateNote(id: string, input: { text: string }): Promise<StickyNote>;
   deleteNote(id: string): Promise<void>;
+  listDailyTasks(date: string): Promise<Array<{ task: DailyTask; status: TaskStatus }>>;
+  addDailyTask(input: { title: string; icon?: string }): Promise<DailyTask>;
+  updateDailyTaskStatus(id: string, date: string, status: TaskStatus): Promise<TaskStatus>;
 }
 ```
 
@@ -64,6 +71,9 @@ interface CalendarDataSource {
 | `POST` | `/api/calendar/notes` | body `{ "date": "2026-11-06", "text": "..." }`，返回 `{ note: StickyNote }` |
 | `PATCH` | `/api/calendar/notes/:id` | body `{ "text": "..." }`，返回 `{ note: StickyNote }` |
 | `DELETE` | `/api/calendar/notes/:id` | 删除便签 |
+| `GET` | `/api/calendar/daily-tasks?date=2026-11-06` | 返回 `{ dailyTasks: [{ task: DailyTask, status: TaskStatus }] }` |
+| `POST` | `/api/calendar/daily-tasks` | body `{ "title": "喝水", "icon": "💧" }`，返回 `{ task: DailyTask }` |
+| `PATCH` | `/api/calendar/daily-tasks/:id/status?date=2026-11-06` | body `{ "status": "done" }`，返回 `{ status: TaskStatus }` |
 
 错误建议统一为：
 
@@ -120,6 +130,23 @@ interface CalendarDataSource {
 }
 ```
 
+每日任务（重复定义 + 当天状态）：
+
+```json
+{
+  "dailyTasks": [
+    {
+      "task": { "id": "daily-01", "title": "喝够 8 杯水", "icon": "💧", "recurrence": "daily" },
+      "status": "done"
+    },
+    {
+      "task": { "id": "daily-02", "title": "阅读 20 分钟", "icon": "📖", "recurrence": "daily" },
+      "status": "todo"
+    }
+  ]
+}
+```
+
 字段约束、枚举和不变量见 `docs/interfaces.md`。
 
 ### 2.4 异步加载与错误处理
@@ -127,12 +154,13 @@ interface CalendarDataSource {
 接入后端时需要补上：
 
 - 首次加载 loading 状态；加载失败展示可重试的错误态，不破坏工具栏与导航。
-- 空数据态沿用现有空状态（无事件 / 无便签 / 无任务）。
+- 空数据态沿用现有空状态（无事件 / 无便签 / 无任务 / 无每日任务）。
 - 任务状态更新建议乐观更新：先改 UI，再提交 `PATCH`；失败时回滚并播报错误。
 - 清单 / 便签的新增与修改建议先在 store 内改 UI，再提交请求；失败时回滚到提交前的快照，并把错误写回对应表单的 `role="alert"` 区域。
+- 每日任务也建议乐观更新：先切换当天状态 / 先插入新定义，再提交请求；失败时回滚 store 并显示 `role="alert"` 错误。
 - 删除目前是“两步确认 + 立即删除”；接入后端后建议改为可撤销删除，或在服务端保留回收站。
 - 校验规则与前端保持一致：任务标题 1–80 字符、便签 1–200 字符；开始 07:00–20:59、持续 5–720 分钟、结束不晚于 21:00；服务端仍需重复校验。
-- 范围请求只取当前视图所需区间（月视图覆盖 6 × 7 天，周视图覆盖 7 天，日视图取当天）。
+- 范围请求只取当前视图所需区间（月视图覆盖 6 × 7 天，周视图覆盖 7 天，日视图取当天，并取当天每日任务状态）。
 - 刷新后以服务端为准；本地只保留临时 UI 状态。
 
 ### 2.5 清单 / 便签 store 接入
@@ -143,6 +171,8 @@ interface CalendarDataSource {
 2. 用数据源实现同一组 `services.inbox` 方法，模块无需改动；注意保持 `listTasks()` / `listNotes()` / `listCalendarEvents()` 的同步读取语义，或先改造模块支持异步。
 
 store 接口、校验与错误码见 `docs/interfaces.md` 3.3。定时任务写入后，`src/app.js` 的 `inbox.subscribe` 会局部刷新日视图时间表；接入异步数据源时，刷新前需先完成任务列表更新，避免时间表短暂使用旧快照。
+
+每日任务 store 的接入方式见 3.4；`services.dailyTasks` 与 `services.inbox` 都保持在 `src/app.js` 创建唯一实例。
 
 ## 3. 新增模块
 
@@ -181,8 +211,53 @@ export function mount(context) {
 3. 模块只 import `src/calendar.js`、`src/tasks.js` 等公开纯函数；不 import 其它模块内部文件。
 4. 样式加 `.mod-<name>-` 前缀；不改全局元素选择器。
 5. 补模块单测；涉及 UI 时补 1440 / 1024 / 768 / 390 截图。
-6. 如需在主干挂载，提交“接口登记点”改动：只允许一行注册 + 必要的 `services` 导出，并在 PR 中标注。当前 inbox 模块使用 `<aside class="day-sidebar" data-module-root="inbox">` 与 `services.inbox`。
+6. 如需在主干挂载，提交“接口登记点”改动：只允许一行注册 + 必要的 `services` 导出，并在 PR 中标注。当前 inbox 模块使用 `<aside class="day-sidebar" data-module-root="inbox">` 与 `services.inbox`；daily-tasks 使用 `<div data-module-root="daily-tasks"></div>` 与 `services.dailyTasks`。
 7. 更新 `docs/interfaces.md` 与本文档，再请求 review。
+
+### 3.4 已落地示例：`daily-tasks`
+
+`src/modules/daily-tasks/` 是按该模式接入的第一个模块，可作为后续模块的参考：
+
+```
+src/modules/daily-tasks/
+  index.js        mount(context)：渲染日视图每日任务条与手工添加入口
+  store.js        纯逻辑：定义、按日状态、订阅
+  styles.css      .mod-daily-tasks-* 样式，index.html 中一行 <link> 加载
+  __tests__/      node:test
+  README.md       接口、不变量、dsh / 手工两个入口
+```
+
+主干改动保持最小：
+
+- `src/app.js`：引入模块、创建 store、日视图一行槽位、`mount / destroy` 生命周期、`window.schedule.dailyTasks`。
+- `index.html`：加载模块样式的一行 `<link>`。
+- `src/data.js`：`sampleDailyTasks` 导出（当前为空数组），不改原有字段。
+
+两个添加入口：
+
+- dsh：改 `sampleDailyTasks`（持久，随页面加载）或调用 `window.schedule.dailyTasks.add(...)`（会话内）。
+- 手工：日视图「每日任务」条 → `＋ 添加` → 输入标题 → `加入`（会话内）。
+
+当前没有后端，运行时新增与手工新增刷新后不保留；需要持久化时先按下一节替换数据源。
+
+### 3.5 已落地示例：`inbox`（清单 / 便签 / 定时任务）
+
+```
+src/modules/inbox/
+  index.js        mount(context)：渲染侧栏清单 / 便签面板与时间字段
+  store.js        纯逻辑：任务 / 便签 CRUD、时间字段校验、时间表事件派生
+  styles.css      .mod-inbox-* 样式，index.html 中一行 <link> 加载
+  __tests__/      node:test
+  README.md       接口、不变量、DOM 契约
+```
+
+主干接入点：
+
+- `src/app.js`：创建 `services.inbox`，日视图挂载 / 卸载模块；`inbox.subscribe(refreshDayTimeline)` 在任务变化时只局部刷新时间表。
+- `index.html`：加载模块样式的一行 `<link>`。
+- `src/data.js`：`sampleTasks` / `sampleNotes`（当前为空数组）。
+
+任务时间同步：没有时间字段的任务只留在清单；填写 `start` + `duration` 后绑定日期，`listCalendarEvents(date)` 派生 teal 时间表事件。月 / 周视图暂不展示定时任务；删除为两步确认，刷新后回到空白初始状态。
 
 ## 4. 本地与公网预览
 
@@ -205,6 +280,8 @@ export function mount(context) {
 - [ ] 对接方式、错误态、空态、回滚策略已说明。
 - [ ] `npm test` 通过；新增纯逻辑有测试。
 - [ ] 三视图与任务状态交互回归通过。
+- [ ] 清单 / 便签新增、编辑、删除与定时任务时间表同步已检查。
+- [ ] 每日任务：手工添加、空输入、跨日重置、dsh API、刷新后会话数据回退已检查。
 - [ ] 1440 / 1024 / 768 / 390 无横向溢出、无 console error。
 - [ ] UI 改动附 Before/After 截图。
 - [ ] 未提交设计备选、临时预览或敏感信息。

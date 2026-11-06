@@ -1,0 +1,391 @@
+/* Daily recurring tasks module. All selectors are namespaced with
+   .mod-daily-tasks- so the module can be mounted without touching the host
+   layout or global element styles. */
+
+.mod-daily-tasks-slot {
+  display: block;
+  width: 100%;
+  max-width: 1240px;
+  margin: 0 auto;
+}
+
+.mod-daily-tasks {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+  padding: 6px 12px;
+  border: 1px solid rgba(221, 179, 169, 0.38);
+  border-radius: 14px;
+  background: rgba(255, 253, 251, 0.78);
+  box-shadow: 0 6px 18px rgba(150, 92, 80, 0.05);
+}
+
+.mod-daily-tasks-head {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+}
+
+.mod-daily-tasks-title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+  color: #241d1b;
+  font-size: 13px;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+}
+
+.mod-daily-tasks-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #ef8f86;
+  box-shadow: 0 0 0 3px rgba(239, 143, 134, 0.16);
+}
+
+.mod-daily-tasks-progress {
+  color: #9a817b;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.mod-daily-tasks-track {
+  display: inline-block;
+  width: 46px;
+  height: 4px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #f5e3de;
+}
+
+.mod-daily-tasks-track > span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #f2a199, #e57268);
+  transition: width 0.2s ease;
+}
+
+.mod-daily-tasks-list {
+  display: flex;
+  flex: 1 1 360px;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.mod-daily-tasks-item {
+  min-width: 0;
+  max-width: 230px;
+}
+
+.mod-daily-tasks-chip {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px 3px 5px;
+  border: 1px solid #f0ded8;
+  border-radius: 999px;
+  background: #fffdfb;
+  color: #2b211e;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+}
+
+.mod-daily-tasks-chip:hover {
+  border-color: #e8c9c2;
+  background: #fff8f5;
+}
+
+.mod-daily-tasks-chip:active {
+  transform: scale(0.99);
+}
+
+.mod-daily-tasks-icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #fdf3e3;
+  font-size: 11px;
+  line-height: 1;
+}
+
+.mod-daily-tasks-copy {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.mod-daily-tasks-name {
+  overflow: hidden;
+  font-size: 11.5px;
+  font-weight: 550;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mod-daily-tasks-state {
+  color: #ad948d;
+  font-size: 9px;
+  line-height: 1.2;
+}
+
+.mod-daily-tasks-check {
+  position: relative;
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 17px;
+  height: 17px;
+  margin-left: 1px;
+  border: 2px solid #e8c9c2;
+  border-radius: 50%;
+  background: #fffdfb;
+  color: #fff;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.mod-daily-tasks-check::after {
+  content: "";
+  position: absolute;
+  inset: -6px;
+  border-radius: 50%;
+}
+
+.mod-daily-tasks-check svg {
+  display: none;
+}
+
+.mod-daily-tasks-chip[data-status="partial"] {
+  border-color: #f0c9c2;
+  background: #fff9f6;
+}
+
+.mod-daily-tasks-chip[data-status="partial"] .mod-daily-tasks-state {
+  color: #b07a33;
+}
+
+.mod-daily-tasks-chip[data-status="partial"] .mod-daily-tasks-check {
+  border-color: #d86e64;
+  background: conic-gradient(#ef8f86 0 50%, #fffdfb 50% 100%);
+}
+
+.mod-daily-tasks-chip[data-status="done"] {
+  border-color: #dbe8d3;
+  background: #f7faf4;
+}
+
+.mod-daily-tasks-chip[data-status="done"] .mod-daily-tasks-name {
+  color: #a7948f;
+  text-decoration: line-through;
+}
+
+.mod-daily-tasks-chip[data-status="done"] .mod-daily-tasks-state {
+  color: #789b67;
+}
+
+.mod-daily-tasks-chip[data-status="done"] .mod-daily-tasks-icon {
+  opacity: 0.65;
+}
+
+.mod-daily-tasks-chip[data-status="done"] .mod-daily-tasks-check {
+  border-color: #8fb97b;
+  background: #8fb97b;
+}
+
+.mod-daily-tasks-chip[data-status="done"] .mod-daily-tasks-check svg {
+  display: block;
+}
+
+.mod-daily-tasks-hint {
+  flex: none;
+  color: #b9a39c;
+  font-size: 8.5px;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.mod-daily-tasks-add {
+  flex: none;
+  margin-left: auto;
+  padding: 5px 11px;
+  border: 1px dashed #e8c9c2;
+  border-radius: 999px;
+  background: transparent;
+  color: #b07a73;
+  font-size: 10.5px;
+  line-height: 1.4;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.mod-daily-tasks-add:hover {
+  border-color: #d86e64;
+  background: #fff8f5;
+  color: #b25a51;
+}
+
+.mod-daily-tasks-form {
+  display: flex;
+  flex: 1 1 300px;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding-top: 2px;
+}
+
+.mod-daily-tasks-form[hidden] {
+  display: none;
+}
+
+.mod-daily-tasks-input {
+  min-width: 0;
+  flex: 1 1 220px;
+  padding: 6px 9px;
+  border: 1px solid #ecd4cd;
+  border-radius: 8px;
+  background: #fffdfb;
+  color: #2b211e;
+  font: inherit;
+  font-size: 11px;
+}
+
+.mod-daily-tasks-input::placeholder {
+  color: #c0aaa4;
+}
+
+.mod-daily-tasks-input:focus {
+  outline: none;
+  border-color: #ef8f86;
+  box-shadow: 0 0 0 3px rgba(239, 143, 134, 0.16);
+}
+
+.mod-daily-tasks-submit,
+.mod-daily-tasks-cancel {
+  flex: none;
+  padding: 6px 11px;
+  border-radius: 8px;
+  font-size: 10.5px;
+  line-height: 1.4;
+  cursor: pointer;
+}
+
+.mod-daily-tasks-submit {
+  border: 1px solid #e57268;
+  background: #ef8f86;
+  color: #fff;
+}
+
+.mod-daily-tasks-submit:hover {
+  background: #e57268;
+}
+
+.mod-daily-tasks-cancel {
+  border: 1px solid #ecd4cd;
+  background: transparent;
+  color: #a58c86;
+}
+
+.mod-daily-tasks-cancel:hover {
+  border-color: #d8b8b0;
+  color: #8f7169;
+}
+
+.mod-daily-tasks-error {
+  flex: 1 1 100%;
+  margin: 0;
+  color: #c94b42;
+  font-size: 9.5px;
+}
+
+.mod-daily-tasks-empty {
+  flex: 1 1 240px;
+  margin: 0;
+  padding: 7px 10px;
+  border: 1px dashed #f0ded8;
+  border-radius: 10px;
+  color: #b59b94;
+  font-size: 10px;
+  text-align: center;
+}
+
+.mod-daily-tasks-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* While adding, the form shares the bar row on wide screens and replaces the
+   hint; this keeps the fixed-height day columns from being squeezed. */
+.mod-daily-tasks.is-adding .mod-daily-tasks-hint {
+  display: none;
+}
+
+.mod-daily-tasks.is-adding .mod-daily-tasks-list {
+  flex: 0 1 auto;
+}
+
+.mod-daily-tasks.is-adding .mod-daily-tasks-add {
+  margin-left: 0;
+}
+
+@media (max-width: 900px) {
+  .mod-daily-tasks {
+    gap: 6px 9px;
+  }
+
+  .mod-daily-tasks-hint {
+    display: none;
+  }
+
+  .mod-daily-tasks-add {
+    order: 2;
+    margin-left: auto;
+  }
+
+  .mod-daily-tasks-list {
+    order: 3;
+    flex-basis: 100%;
+  }
+
+  .mod-daily-tasks.is-adding .mod-daily-tasks-list {
+    flex-basis: 100%;
+  }
+
+  .mod-daily-tasks-form {
+    order: 4;
+    flex-basis: 100%;
+  }
+}
+
+@media (max-width: 640px) {
+  .mod-daily-tasks {
+    padding: 6px 10px;
+  }
+
+  .mod-daily-tasks-add {
+    padding: 5px 9px;
+  }
+}

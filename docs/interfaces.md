@@ -1,6 +1,6 @@
 # 日程 · 接口说明
 
-版本：`0.3`（PR #3 主干基线 + 清单 / 便签编辑 + 清单任务时间同步）
+版本：`0.3`（PR #3 主干基线 + 每日任务模块 + 清单 / 便签编辑与任务时间同步）
 适用范围：当前静态实现、后续模块与后端对接
 
 本文档说明「日程」当前**已经实现**的模块接口、数据契约与 DOM 契约，以及预留的扩展接口。接口变更必须同步修改本文档，并按 `AGENTS.md` 的规则评审。
@@ -12,12 +12,14 @@ src/calendar.js    纯日期 / 网格 / 时间布局函数（无 DOM、无副作
 src/tasks.js       任务三态与进度统计（无 DOM）
 src/data.js        空白种子数据（首次加载无示例内容，可被数据源替换）
 src/app.js         应用控制器：状态、视图分发、DOM 事件
-src/modules/inbox/ 清单 / 便签编辑模块（store + 面板渲染 + 模块样式）
-index.html         页面骨架与工具栏
+src/modules/daily-tasks/
+                   每日重复任务模块：store、日视图 UI、模块测试
+src/modules/inbox/ 清单 / 便签编辑模块：store、面板渲染、时间表事件派生、样式
+index.html         页面骨架、工具栏与模块样式入口
 assets/styles.css  全局与视图样式
 ```
 
-当前没有构建步骤和运行时依赖；`app.js` 是唯一入口，负责读取 URL、维护 `state`、渲染视图与处理交互。日视图的清单 / 便签面板由 `src/modules/inbox` 挂载（见 3.3 与 4.4）。
+当前没有构建步骤和运行时依赖；`app.js` 是唯一入口，负责读取 URL、维护 `state`、渲染视图与处理交互。日视图会额外挂载 `daily-tasks` 与 `inbox` 模块，并分别通过 `services.dailyTasks` / `services.inbox` 共享状态。
 
 ## 2. 数据契约
 
@@ -30,6 +32,7 @@ assets/styles.css  全局与视图样式
 | `EventIcon` | `sun` / `doc` / `activity` / `search` / `users` / `link` / `chat` / `refresh` / `book` / `map` | 日视图时间轴图标 |
 | `NoteTone` | `yellow` / `pink` / `blue` | 便签纸颜色 |
 | `TaskStatus` | `todo` / `partial` / `done` | 待完成 / 部分完成 / 完成 |
+| `DailyTaskRecurrence` | `daily` | 每日任务固定每天重复 |
 
 ### 2.2 数据结构
 
@@ -64,9 +67,20 @@ interface Task {
   end?: string;               // 派生字段：start + duration，仅读取
 }
 // 不填 date / start / duration 时是未排期 Inbox；填写后绑定该日并同步到日视图时间表。
+
+interface DailyTask {
+  id: string;                 // 集合内唯一
+  title: string;              // 纯文本，1–80 字符
+  icon?: string;              // 缺省 🔁；最多 8 个 code point
+  recurrence: 'daily';        // 固定每日重复，不绑定具体日期
+}
+// 每日任务是重复定义，不进入时间表；完成状态按日期单独记录：
+// statuses[YYYY-MM-DD][taskId] = TaskStatus，缺省 todo。
 ```
 
-新增任务时 `status = todo`，`icon` 缺省为 `📝`；新增便签时 `tone` 按当天已有便签数量在 `yellow → pink → blue` 间轮换，`tilt` 同步轮换。时间字段可同时缺省；只要填写其一，就必须同时填写 `start` 和 `duration`，并带合法 `date`。
+新增任务时 `status = todo`，`icon` 缺省为 `📝`；时间字段可同时缺省；只要填写其一，就必须同时填写 `start` 和 `duration`，并带合法 `date`。新增便签时 `tone` 按当天已有便签数量在 `yellow → pink → blue` 间轮换，`tilt` 同步轮换。
+
+**每日任务与 Inbox 的关系**：`Task` 默认是未排期的全局 Inbox；填写时间后绑定日期并派生时间表事件。`DailyTask` 是每天重新出现的重复任务，状态按日期隔离，不占用时间表。两组任务共用 `TaskStatus` 枚举与循环顺序。
 
 ### 2.3 不变量
 
@@ -74,16 +88,20 @@ interface Task {
 - 日期使用本地时区的 `YYYY-MM-DD`；时间使用 24 小时制 `HH:mm`。
 - `start < end`；07:00–21:00 之外的周/日视图内容会被裁切，月视图仍按日期展示。
 - 标题、便签、备注按纯文本处理；不要传 HTML，渲染层会转义。
-- 月 / 周视图读取事件；日视图读取事件、当天便签、全局任务。
+- 月 / 周视图读取事件；日视图读取事件、当天便签、全局任务与每日任务定义。
 - 任务状态切换顺序固定：`todo → partial → done → todo`；完成进度只统计 `done / total`。
 - 清单任务标题 1–80 个字符，便签文本 1–200 个字符；首尾空白会被去掉。
-- 任务时间：`start` 为 07:00–20:59 的 `HH:mm`，`duration` 为 5–720 分钟的整数，结束时间不得晚于 21:00（日视图时间表范围）。
+- 任务时间：`start` 为 07:00–20:59 的 `HH:mm`，`duration` 为 5–720 分钟的整数，结束时间不得晚于 21:00。
 - 未填时间的任务不绑定日期，仍是全局 Inbox；填写时间后绑定 `date`，日视图时间表按该日派生事件展示。
+- `DailyTask.recurrence` 固定为 `daily`；定义没有日期字段，日期只用于读取/写入当天的完成状态；跨天默认回到 `todo`。
+- 每日任务只在日视图展示和手工添加；月 / 周视图不展示每日任务条。
 - 清单 / 便签的新增、修改、删除只保存在当前页面会话（内存 store），刷新后恢复空白初始状态。
 
 ### 2.4 示例数据
 
-`src/data.js` 导出 `sampleEvents`、`sampleNotes`、`sampleTasks`，当前均为空数组：按需求方要求首次加载不显示示例内容，日程 / 清单 / 便签都从空白开始，通过 UI 新增。文件仍保留为数据源替换点；任何示例数据不得包含真实用户隐私、飞书私有内容、凭据或 token。
+`src/data.js` 导出 `sampleEvents`、`sampleNotes`、`sampleTasks`、`sampleDailyTasks`，当前均为空数组：按需求方要求首次加载不显示示例内容，日程 / 清单 / 便签 / 每日任务都从空白开始，通过 UI 新增。文件仍保留为数据源替换点；任何示例数据不得包含真实用户隐私、飞书私有内容、凭据或 token。
+
+`sampleDailyTasks` 是每日任务的定义入口：dsh 可以追加条目；手工添加与运行时 API 新增的任务只在当前页面会话中，刷新后回到该数组的初始定义。
 
 ## 3. 纯函数接口
 
@@ -111,7 +129,7 @@ interface Task {
 | `timeToMinutes(value)` | string | number | `09:30` → `570`；非法返回 `NaN` |
 | `groupEventsByDate(events)` | CalendarEvent[] | Map<string, CalendarEvent[]> | 按日期分组并按开始时间排序 |
 | `eventsForDay(events, date)` | CalendarEvent[], Date | CalendarEvent[] | 指定日的事件 |
-| `layoutOverlaps(events)` | CalendarEvent[] | Map<id, {column, columns}> | 周视图重叠事件的并排列 |
+| `layoutOverlaps(events)` | CalendarEvent[] | Map<id, {column, columns}> | 重叠事件的并排列（周 / 日视图共用） |
 | `weekEventStyle(event, options?)` | CalendarEvent, object | {top, height} \| null | 周视图纵向坐标；超出 07:00–21:00 返回 null 或裁切 |
 
 常量：`WEEKDAY_LABELS`、`WEEKDAY_FULL`、`WEEK_GRID_START_HOUR = 7`、`WEEK_GRID_END_HOUR = 21`、`WEEK_GRID_HOUR_HEIGHT = 44`。
@@ -156,6 +174,25 @@ store 方法：
 
 错误码：`INBOX_TASK_TITLE_INVALID`、`INBOX_NOTE_TEXT_INVALID`、`INBOX_NOTE_DATE_INVALID`、`INBOX_TASK_SCHEDULE_INVALID`、`INBOX_TASK_NOT_FOUND`、`INBOX_NOTE_NOT_FOUND`、`INBOX_TASK_STATUS_INVALID`。
 
+### 3.4 `src/modules/daily-tasks/store.js`
+
+每日任务的纯逻辑 store（无 DOM）。模块入口 `index.js` 重新导出以下函数，宿主与测试都应从模块入口导入。
+
+| 导出 | 说明 |
+| --- | --- |
+| `normalizeDailyTask(input)` | 校验并规范化 `{ id?, title, icon? }`；返回带 `recurrence: 'daily'` 的对象或 `null` |
+| `createDailyTaskStore(seedTasks, options?)` | 创建 store；`options.createId` 可注入 id 生成器（测试用） |
+| `store.addTask(input)` | 新增定义；返回任务副本；非法标题 / 重复 id 抛带 `code` 的 `Error` |
+| `store.listTasks()` | 全部定义副本 |
+| `store.listForDate(dateKey)` | `[{ task, status }]`，状态缺省 `todo` |
+| `store.getStatus(taskId, dateKey)` | 当天状态 |
+| `store.setStatus(taskId, dateKey, status)` | 写入当天状态 |
+| `store.toggleStatus(taskId, dateKey)` | 按三态循环切换当天状态 |
+| `store.statusCounts(dateKey)` | 当天 `{ total, todo, partial, done, percent }` |
+| `store.subscribe(listener)` | 返回退订函数；新增 / 状态变化时通知 |
+
+校验规则：`title` 去空白后 1–80 字符；`icon` 最多 8 个 code point，缺省 `🔁`；`dateKey` 必须是真实的 `YYYY-MM-DD`；`status` 必须是 `todo / partial / done`。错误码见模块 README。
+
 ## 4. 页面与 DOM 契约
 
 ### 4.1 URL
@@ -191,6 +228,14 @@ store 方法：
 | `[data-inbox-task-add-start]` / `[data-inbox-task-add-duration]` | 新增任务的开始时间 / 持续分钟（可选） |
 | `[data-inbox-task-edit-start]` / `[data-inbox-task-edit-duration]` | 编辑任务的时间字段 |
 | `[data-inbox-note-live]` | 便签面板的 `aria-live="polite"` 播报区域 |
+| `[data-module-root="daily-tasks"]` | 日视图中的每日任务模块槽位 |
+| `[data-daily-task-row="<id>"]` | 每日任务胶囊行，`data-status` 为当天状态 |
+| `[data-daily-tasks-toggle="<id>"]` | 每日任务状态切换按钮；点击循环三态 |
+| `[data-daily-tasks-add-toggle]` | 手工添加入口，`aria-expanded` 表示表单是否展开 |
+| `[data-daily-tasks-form]` | 手工添加表单；收起时带 `hidden` |
+| `[data-daily-tasks-input]` | 任务名称输入框，`maxlength=80` |
+| `[data-daily-tasks-progress]` | 当天 `done / total 完成` 文本 |
+| `[data-daily-tasks-live]` | 每日任务状态播报区域 |
 
 ### 4.3 任务状态 UI 契约
 
@@ -199,7 +244,17 @@ store 方法：
 - 状态变化向 `[data-task-live]` 写入 `「<title>」已标记为<label>`，供读屏器播报。
 - 不填时间的任务为未排期 Inbox，不绑定日期；填写时间后绑定日期并同步到该日时间表。
 
-### 4.4 清单 / 便签编辑 UI 契约
+### 4.4 每日任务 UI 契约
+
+- 仅在日视图出现；进入日视图时挂载，离开 / 重绘时卸载。
+- 点击 `[data-daily-tasks-toggle]` 只更新当前锚点日期的状态，按 `todo → partial → done → todo` 循环；跨日导航后同一任务默认回到 `todo`。
+- 行 `[data-daily-task-row]` 的 `data-status`、胶囊文案、`[data-daily-tasks-progress]` 与进度条宽度同帧更新。
+- `[data-daily-tasks-add-toggle]` 展开 / 收起 `[data-daily-tasks-form]`；提交成功后表单收起、定义追加；空 / 超长标题留在表单内并显示 `role="alert"` 错误。
+- 手工添加只填标题，图标使用默认 `🔁`；dsh 可通过运行时 API 指定 `icon`。
+- 状态变化 / 新增向 `[data-daily-tasks-live]` 写入中文播报；`Esc` 收起添加表单。
+- 每日任务条不进入月 / 周视图，不写入时间表。
+
+### 4.5 清单 / 便签编辑 UI 契约
 
 - 点击 `[data-inbox-add-task]` / `[data-inbox-add-note]` 打开新增表单；提交后追加到列表末尾，焦点移到新条目。
 - 点击 `[data-inbox-edit-task]` / `[data-inbox-edit-note]` 将条目切换为行内表单；保存后回到条目，`Escape` 取消。
@@ -213,7 +268,7 @@ store 方法：
 
 ## 5. 扩展接口
 
-### 5.1 模块契约（inbox 模块已落地，其余为预留）
+### 5.1 模块契约（daily-tasks / inbox 已落地，其余为预留）
 
 ```js
 export function mount(context) {
@@ -231,12 +286,31 @@ export function mount(context) {
 {
   root: HTMLElement;
   state: { view: ViewKind; anchor: Date };   // 只读快照
-  data: { events: CalendarEvent[]; notes: StickyNote[]; tasks: Task[] };
-  services: Record<string, Function>;         // 当前已有 services.inbox（见 3.3）
+  data: {
+    events: CalendarEvent[];
+    notes: StickyNote[];
+    tasks: Task[];
+    dailyTasks?: DailyTask[];                 // 每日任务定义快照
+  };
+  services: {
+    dailyTasks?: DailyTasksService;           // 已导出
+    inbox?: InboxService;                     // 已导出
+    [name: string]: unknown;
+  };
 }
 ```
 
-约束见 `AGENTS.md`：模块样式加 `.mod-<name>-` 前缀、不跨模块 import、不直接改全局状态、共享能力走 services。日视图目前以 `<aside class="day-sidebar" data-module-root="inbox">` 作为 inbox 模块注册点；新增模块应复用最小注册点 / services 模式，并更新本文档。
+`DailyTasksService` 与 `InboxService` 的方法分别与 3.4 / 3.3 的 store 方法一一对应；两者均由 `src/app.js` 创建唯一实例并注入。
+
+约束见 `AGENTS.md`：模块样式加 `.mod-<name>-` 前缀、不跨模块 import、不直接改全局状态、共享能力走 services。当前注册点：
+
+- 日视图 `renderDay()` 内一行 `<div data-module-root="daily-tasks"></div>`；
+- 日视图 `<aside class="day-sidebar" data-module-root="inbox"></aside>`；
+- `render()` 在日视图挂载 / 其他视图卸载两个模块；
+- `index.html` 分别加载 `daily-tasks/styles.css` 与 `inbox/styles.css`；
+- `app.js` 创建 `services.dailyTasks` 与 `services.inbox`。
+
+后续模块应复用该模式；新增共享能力先提交最小接口提案。
 
 ### 5.2 数据源契约（建议，尚未实现）
 
@@ -254,14 +328,36 @@ interface CalendarDataSource {
   createNote(input: { date: string; text: string }): Promise<StickyNote>;
   updateNote(id: string, input: { text: string }): Promise<StickyNote>;
   deleteNote(id: string): Promise<void>;
+  listDailyTasks(date: string): Promise<Array<{ task: DailyTask; status: TaskStatus }>>;
+  addDailyTask(input: { title: string; icon?: string }): Promise<DailyTask>;
+  updateDailyTaskStatus(id: string, date: string, status: TaskStatus): Promise<TaskStatus>;
 }
 ```
 
 后端映射、异步加载、错误回滚与乐观更新见 `docs/integration.md`。
 
+### 5.3 dsh 输入接口
+
+`app.js` 暴露只读命名空间 `window.schedule`，其中 `dailyTasks` 是当前页面会话内的每日任务接口：
+
+```js
+window.schedule.dailyTasks.add({ title: '整理今日待办', icon: '📝' });
+window.schedule.dailyTasks.list('2026-11-06');
+// [{ task: { id, title, icon, recurrence: 'daily' }, status: 'todo' }, ...]
+
+window.schedule.dailyTasks.toggle('daily-01', '2026-11-06');
+window.schedule.dailyTasks.setStatus('daily-01', 'done', '2026-11-06');
+window.schedule.dailyTasks.getStatus('daily-01', '2026-11-06');
+```
+
+- `add(input)` 等价于 `services.dailyTasks.addTask(input)`；返回值是任务副本。
+- `list(date = 今天)`、`getStatus(id, date = 今天)`、`toggle(id, date = 今天)`、`setStatus(id, status, date = 今天)` 的日期参数为 `YYYY-MM-DD`。
+- 非法输入抛带 `code` 的 `Error`（`DAILY_TASK_INVALID` / `DAILY_TASK_DUPLICATE_ID` / `DAILY_TASK_STATUS_INVALID` / `DAILY_TASK_DATE_INVALID`）。
+- 运行时新增与手工添加只存在当前页面会话；刷新后回到 `src/data.js` 的 `sampleDailyTasks`。需要持久化的 dsh 输入应改该数据入口并重新加载。
+
 ## 6. 版本与兼容
 
-- 当前接口版本 `0.3`；`0.3` 在 `0.2` 基础上增量加入任务可选时间字段与日视图时间表同步，已发布字段与稳定选择器保持不变。
+- 当前接口版本 `0.3`；0.2 增量加入 `DailyTask`、`DailyTasksService`、`window.schedule.dailyTasks` 与每日任务 DOM；0.3 增量加入清单 / 便签 CRUD、任务可选时间字段与日视图时间表派生事件。已发布字段与稳定选择器保持不变。
 - 新增字段必须可选，渲染层对未知可选字段保持忽略。
 - 颜色 / 图标 / 状态枚举新增时，需要同时补样式与回退；删除或重命名属于 breaking change。
 - 破坏性接口变更必须升级版本、更新本文档与 `docs/integration.md`，并在 PR 中明确迁移方案。
