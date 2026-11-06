@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>日程</title>
+    <link rel="stylesheet" href="./assets/styles.css" />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%233370ff'/%3E%3Cpath d='M8 12h16M8 22h9M11 7v4M21 7v4' stroke='white' stroke-width='2.2' stroke-linecap='round'/%3E%3C/svg%3E"
+    />
+  </head>
+  <body>
+    <div class="app">
+      <header class="topbar">
+        <div class="brand">
+          <span class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+              <rect x="3.5" y="5" width="17" height="15.5" rx="3"></rect>
+              <path d="M3.5 9.5h17M8 2.8v4M16 2.8v4"></path>
+            </svg>
+          </span>
+          <span class="brand-name">日程</span>
+          <span class="brand-sub">CALENDAR</span>
+        </div>
+
+        <div class="view-switch" role="group" aria-label="日历视图">
+          <button type="button" data-view="month" aria-pressed="true">月</button>
+          <button type="button" data-view="week" aria-pressed="false">周</button>
+          <button type="button" data-view="day" aria-pressed="false">日</button>
+        </div>
+      </header>
+
+      <div class="toolbar">
+        <div class="nav-cluster">
+          <button type="button" class="icon-btn" data-action="prev" aria-label="上一个时间段">
+            <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M10 3.5 5.5 8l4.5 4.5"></path>
+            </svg>
+          </button>
+          <button type="button" class="icon-btn" data-action="next" aria-label="下一个时间段">
+            <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M6 3.5 10.5 8 6 12.5"></path>
+            </svg>
+          </button>
+          <button type="button" class="today-btn" data-action="today">今天</button>
+        </div>
+        <h1 class="period-title" id="period-title"></h1>
+      </div>
+
+      <main class="surface" id="view-root" aria-live="polite"></main>
+    </div>
+
+    <script type="module" src="./src/app.js"></script>
+  </body>
+</html>
