@@ -1,9 +1,9 @@
 import { addDays, startOfDay, toDateKey } from './calendar.js';
 
 /**
- * Local demo data. The minimal loop intentionally has no persistence or CRUD;
- * events, notes and tasks live next to "today" so the views have content on
- * first load.
+ * Local demo data. There is no persistence: the day view's in-memory inbox
+ * store (src/modules/inbox) is seeded from these arrays, and add / edit /
+ * delete results live only for the current page session.
  */
 const relativeDay = (offset) => toDateKey(addDays(startOfDay(new Date()), offset));
 

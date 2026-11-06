@@ -63,7 +63,7 @@ export function mount(context) {
 - 模块只依赖 `context` 和公开的纯函数（`src/calendar.js`、`src/tasks.js`）；不得 import 另一个模块的内部文件。
 - 模块不得直接修改全局状态或其它模块的 DOM；共享状态通过 `services` 或数据快照传递。
 - 模块样式必须命名空间化，禁止修改全局 `button`、`div` 等选择器。
-- 当前主干尚未导出 `services`；第一个需要共享状态的模块必须先提交最小 `services` 接口提案，不能直接 `import` `src/app.js` 的内部符号。
+- 当前主干提供最小 `services` 注入（已有 `services.inbox`），但没有通用注册器；需要共享状态的模块先提交最小 `services` 接口提案，不能直接 `import` `src/app.js` 的内部符号。
 - 新视图 / 新模块在主干的注册点只允许是一行注册改动；注册改动需在 PR 中标注为“接口登记点”，并附接口文档更新。
 - 模块必须自测，并在 PR 中给出 1440 / 1024 / 768 / 390 宽度下的截图或说明。
 
@@ -104,4 +104,5 @@ export function mount(context) {
 - **数据源**：替换 `src/data.js` 或按 `docs/integration.md` 接入 DataSource；不在视图模块里直接 `fetch`。
 - **新视图**：按模块契约新增；注册点改动需评审。
 - **任务状态持久化**：由数据源 / services 提供，不在 UI 模块内散落存储逻辑。
-- **日程 / 便签 CRUD、提醒、协作、多日历、时区**：当前范围外；需要需求方明确立项后再做。
+- **清单 / 便签 CRUD**：已由 `src/modules/inbox` 提供（新增、修改、删除；页面会话内有效，无持久化）。持久化仍由数据源 / services 提供。
+- **日程 CRUD、提醒、协作、多日历、时区**：当前范围外；需要需求方明确立项后再做。

@@ -1,6 +1,6 @@
 # 日程 · 接口说明
 
-版本：`0.1`（PR #3 主干基线）
+版本：`0.2`（PR #3 主干基线 + 清单 / 便签编辑增量）
 适用范围：当前静态实现、后续模块与后端对接
 
 本文档说明「日程」当前**已经实现**的模块接口、数据契约与 DOM 契约，以及预留的扩展接口。接口变更必须同步修改本文档，并按 `AGENTS.md` 的规则评审。
@@ -8,15 +8,16 @@
 ## 1. 模块地图
 
 ```
-src/calendar.js   纯日期 / 网格 / 时间布局函数（无 DOM、无副作用）
-src/tasks.js      任务三态与进度统计（无 DOM）
-src/data.js       当前静态示例数据（可被数据源替换）
-src/app.js        应用控制器：状态、视图分发、DOM 事件
-index.html        页面骨架与工具栏
-assets/styles.css 全局与视图样式
+src/calendar.js    纯日期 / 网格 / 时间布局函数（无 DOM、无副作用）
+src/tasks.js       任务三态与进度统计（无 DOM）
+src/data.js        当前静态示例数据（可被数据源替换）
+src/app.js         应用控制器：状态、视图分发、DOM 事件
+src/modules/inbox/ 清单 / 便签编辑模块（store + 面板渲染 + 模块样式）
+index.html         页面骨架与工具栏
+assets/styles.css  全局与视图样式
 ```
 
-当前没有构建步骤和运行时依赖；`app.js` 是唯一入口，负责读取 URL、维护 `state`、渲染视图与处理交互。
+当前没有构建步骤和运行时依赖；`app.js` 是唯一入口，负责读取 URL、维护 `state`、渲染视图与处理交互。日视图的清单 / 便签面板由 `src/modules/inbox` 挂载（见 3.3 与 4.4）。
 
 ## 2. 数据契约
 
@@ -61,6 +62,8 @@ interface Task {
 // 任务属于「未排期 Inbox」，没有 date / start / end；所有日期共享同一份清单。
 ```
 
+新增任务时 `status = todo`，`icon` 缺省为 `📝`；新增便签时 `tone` 按当天已有便签数量在 `yellow → pink → blue` 间轮换，`tilt` 同步轮换。
+
 ### 2.3 不变量
 
 - `id` 在各自集合内唯一；状态、颜色、便签色调、图标不得使用未知值。
@@ -69,6 +72,8 @@ interface Task {
 - 标题、便签、备注按纯文本处理；不要传 HTML，渲染层会转义。
 - 月 / 周视图读取事件；日视图读取事件、当天便签、全局任务。
 - 任务状态切换顺序固定：`todo → partial → done → todo`；完成进度只统计 `done / total`。
+- 清单任务标题 1–80 个字符，便签文本 1–200 个字符；首尾空白会被去掉。
+- 清单 / 便签的新增、修改、删除只保存在当前页面会话（内存 store），刷新后恢复示例数据。
 
 ### 2.4 示例数据
 
@@ -116,6 +121,32 @@ interface Task {
 
 `statuses` 是 `Map<taskId, TaskStatus>`，允许覆盖任务初始状态。
 
+### 3.3 `src/modules/inbox/store.js`
+
+清单与便签的内存 store，纯数据、无 DOM，可在 node:test 中直接测试。
+
+| 导出 | 说明 |
+| --- | --- |
+| `createInboxStore({ tasks, notes, idFactory? })` | 创建 store；返回的实例见下表 |
+| `TASK_TITLE_MAX_LENGTH` / `NOTE_TEXT_MAX_LENGTH` | 80 / 200 |
+| `DEFAULT_TASK_ICON` | `📝` |
+| `NOTE_TONES` / `NOTE_TILTS` | 便签颜色与倾斜轮换表 |
+| `normalizeTaskTitle` / `normalizeNoteText` | 去空白并校验，非法时抛出带 `code` 的 `Error` |
+
+store 方法：
+
+| 方法 | 说明 |
+| --- | --- |
+| `listTasks()` | 带当前状态的任务副本，按加入顺序 |
+| `addTask({ title, icon? })` / `updateTask(id, { title?, icon? })` / `deleteTask(id)` | 任务增改删 |
+| `taskStatus(id)` / `setTaskStatus(id, status)` / `cycleTaskStatus(id)` | 三态读取、设置、循环 |
+| `taskProgress()` | `{ total, todo, partial, done, percent }` |
+| `listNotes(date?)` | 指定日期（缺省全部）的便签副本 |
+| `addNote({ date, text })` / `updateNote(id, { text? })` / `deleteNote(id)` | 便签增改删 |
+| `subscribe(listener)` | 变更订阅，返回取消函数 |
+
+错误码：`INBOX_TASK_TITLE_INVALID`、`INBOX_NOTE_TEXT_INVALID`、`INBOX_NOTE_DATE_INVALID`、`INBOX_TASK_NOT_FOUND`、`INBOX_NOTE_NOT_FOUND`、`INBOX_TASK_STATUS_INVALID`。
+
 ## 4. 页面与 DOM 契约
 
 ### 4.1 URL
@@ -142,7 +173,13 @@ interface Task {
 | `[data-task-toggle="<id>"]` | 状态切换按钮；点击循环三态 |
 | `[data-task-progress-text]` | `done / total 完成` 文本 |
 | `[data-task-progress-fill]` | 完成度进度条宽度 |
-| `[data-task-live]` | `aria-live="polite"` 状态播报区域 |
+| `[data-task-live]` | 清单面板内的 `aria-live="polite"` 状态播报区域 |
+| `[data-note-row="<id>"]` | 便签卡片 |
+| `[data-inbox-add-task]` / `[data-inbox-add-note]` | 打开新增表单 |
+| `[data-inbox-edit-task="<id>"]` / `[data-inbox-edit-note="<id>"]` | 进入行内编辑 |
+| `[data-inbox-delete-task="<id>"]` / `[data-inbox-delete-note="<id>"]` | 删除；第一次点击变为「确认删除」 |
+| `[data-inbox-task-form="new" \| "<id>"]` / `[data-inbox-note-form="new" \| "<id>"]` | 新增 / 编辑表单 |
+| `[data-inbox-note-live]` | 便签面板的 `aria-live="polite"` 播报区域 |
 
 ### 4.3 任务状态 UI 契约
 
@@ -151,9 +188,18 @@ interface Task {
 - 状态变化向 `[data-task-live]` 写入 `「<title>」已标记为<label>`，供读屏器播报。
 - 任务为未排期 Inbox，不绑定日期；事件才绑定日期。
 
-## 5. 扩展接口（预留，尚未实现）
+### 4.4 清单 / 便签编辑 UI 契约
 
-### 5.1 模块契约
+- 点击 `[data-inbox-add-task]` / `[data-inbox-add-note]` 打开新增表单；提交后追加到列表末尾，焦点移到新条目。
+- 点击 `[data-inbox-edit-task]` / `[data-inbox-edit-note]` 将条目切换为行内表单；保存后回到条目，`Escape` 取消。
+- 删除为两步确认：首次点击删除按钮变为「确认删除」，再次点击才执行；`Escape` 或切换其它操作会取消确认。
+- 校验失败时表单保持打开，错误信息使用 `role="alert"`；输入框获得焦点。
+- 任务与便签面板的整块内容由模块重绘；`[data-task-row]`、`[data-task-toggle]`、进度选择器与 `[data-task-live]` 在重绘后仍然存在。
+- 便签文本按纯文本渲染，保留换行；列表为空时显示原有空状态。
+
+## 5. 扩展接口
+
+### 5.1 模块契约（inbox 模块已落地，其余为预留）
 
 ```js
 export function mount(context) {
@@ -172,13 +218,13 @@ export function mount(context) {
   root: HTMLElement;
   state: { view: ViewKind; anchor: Date };   // 只读快照
   data: { events: CalendarEvent[]; notes: StickyNote[]; tasks: Task[] };
-  services: Record<string, Function>;         // 当前主干尚未导出，需先提案
+  services: Record<string, Function>;         // 当前已有 services.inbox（见 3.3）
 }
 ```
 
-约束见 `AGENTS.md`：模块样式加 `.mod-<name>-` 前缀、不跨模块 import、不直接改全局状态、共享能力走 services。当前没有模块注册器；首个模块 PR 需要提交最小的注册点 / services 接口提案，并更新本文档。
+约束见 `AGENTS.md`：模块样式加 `.mod-<name>-` 前缀、不跨模块 import、不直接改全局状态、共享能力走 services。日视图目前以 `<aside class="day-sidebar" data-module-root="inbox">` 作为 inbox 模块注册点；新增模块应复用最小注册点 / services 模式，并更新本文档。
 
-### 5.2 数据源契约（建议）
+### 5.2 数据源契约（建议，尚未实现）
 
 当前应用同步读取静态数组。接入后端时，建议实现以下接口（**尚未实现**）：
 
@@ -188,6 +234,12 @@ interface CalendarDataSource {
   listNotes(date: string): Promise<StickyNote[]>;
   listTasks(): Promise<Task[]>;
   updateTaskStatus(id: string, status: TaskStatus): Promise<Task>;
+  createTask(input: { title: string; icon?: string }): Promise<Task>;
+  updateTask(id: string, input: { title?: string; icon?: string }): Promise<Task>;
+  deleteTask(id: string): Promise<void>;
+  createNote(input: { date: string; text: string }): Promise<StickyNote>;
+  updateNote(id: string, input: { text: string }): Promise<StickyNote>;
+  deleteNote(id: string): Promise<void>;
 }
 ```
 
@@ -195,6 +247,7 @@ interface CalendarDataSource {
 
 ## 6. 版本与兼容
 
-- 当前接口版本 `0.1`；新增字段必须可选，渲染层对未知可选字段保持忽略。
+- 当前接口版本 `0.2`；`0.2` 增量加入清单 / 便签编辑模块与 store，已发布的字段与稳定选择器保持不变。
+- 新增字段必须可选，渲染层对未知可选字段保持忽略。
 - 颜色 / 图标 / 状态枚举新增时，需要同时补样式与回退；删除或重命名属于 breaking change。
 - 破坏性接口变更必须升级版本、更新本文档与 `docs/integration.md`，并在 PR 中明确迁移方案。

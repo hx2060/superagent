@@ -23,7 +23,7 @@ import {
   weekEventStyle,
 } from './calendar.js';
 import { sampleEvents, sampleNotes, sampleTasks } from './data.js';
-import { TASK_STATUS_LABELS, nextTaskStatus, taskStatusCounts } from './tasks.js';
+import { createInboxStore, mount as mountInbox } from './modules/inbox/index.js';
 
 const VIEWS = new Set(['month', 'week', 'day']);
 const WEEK_GRID_HEIGHT = (WEEK_GRID_END_HOUR - WEEK_GRID_START_HOUR) * WEEK_GRID_HOUR_HEIGHT;
@@ -34,7 +34,8 @@ const state = {
   anchor: today,
 };
 
-const taskStatuses = new Map(sampleTasks.map((task) => [task.id, task.status]));
+const inbox = createInboxStore({ tasks: sampleTasks, notes: sampleNotes });
+let inboxView = null;
 
 const EVENT_DOT_COLORS = {
   blue: '#3370ff',
@@ -224,43 +225,6 @@ function eventIcon(name) {
   return `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${EVENT_ICONS[name] ?? EVENT_ICONS.doc}</svg>`;
 }
 
-function notesForDay(date) {
-  return sampleNotes.filter((note) => note.date === toDateKey(date));
-}
-
-function renderNote(note) {
-  return `<article class="day-note day-note--${note.tone}" style="--tilt:${note.tilt ?? 0}deg">
-    <p>${escapeHtml(note.text)}</p>
-    <span class="day-note-foot">随手记</span>
-  </article>`;
-}
-
-function statusOf(task) {
-  return taskStatuses.get(task.id) ?? task.status;
-}
-
-function renderTask(task) {
-  const status = statusOf(task);
-  const label = TASK_STATUS_LABELS[status];
-  return `<li class="day-task" data-task-row="${task.id}" data-status="${status}">
-    <span class="task-emoji" aria-hidden="true">${task.icon}</span>
-    <span class="task-body">
-      <span class="task-title">${escapeHtml(task.title)}</span>
-      <span class="task-status-label">${label}</span>
-    </span>
-    <button
-      type="button"
-      class="task-check"
-      data-task-toggle="${task.id}"
-      data-status="${status}"
-      aria-label="切换任务「${escapeHtml(task.title)}」的状态，当前${label}"
-      title="点击切换：待完成 → 部分完成 → 完成"
-    >
-      <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3.2 8.4 3 3 6.6-7"/></svg>
-    </button>
-  </li>`;
-}
-
 function renderDayWeekStrip() {
   const days = getWeekDays(state.anchor);
   const grouped = groupEventsByDate(sampleEvents);
@@ -358,41 +322,11 @@ function renderDayTimeline(dayEvents) {
 
 function renderDay() {
   const dayEvents = eventsForDay(sampleEvents, state.anchor);
-  const dayNotes = notesForDay(state.anchor);
-  const dayTasks = sampleTasks;
-  const counts = taskStatusCounts(dayTasks, taskStatuses);
-
-  const notes = dayNotes.length
-    ? `<div class="day-notes">${dayNotes.map(renderNote).join('')}</div>`
-    : '<div class="day-empty">这一天还没有便签</div>';
-
-  const tasks = dayTasks.length
-    ? `<ul class="day-task-list">${dayTasks.map(renderTask).join('')}</ul>`
-    : '<div class="day-empty">这一天还没有清单任务</div>';
 
   return `<div class="day-view">
     ${renderDayWeekStrip()}
     <div class="day-columns">
-      <aside class="day-sidebar">
-        <section class="day-panel day-tasks-panel">
-          <header class="day-panel-head">
-            <h2 class="day-panel-title"><span class="day-dot day-dot--green" aria-hidden="true"></span>清单</h2>
-            <div class="day-task-progress">
-              <span data-task-progress-text>${counts.done} / ${counts.total} 完成</span>
-              <span class="task-progress-track" aria-hidden="true"><span class="task-progress-fill" data-task-progress-fill style="width:${counts.percent}%"></span></span>
-            </div>
-          </header>
-          ${tasks}
-          <p class="day-task-hint">点击右侧圆点切换：待完成 → 部分完成 → 完成</p>
-        </section>
-        <section class="day-panel day-notes-panel">
-          <header class="day-panel-head">
-            <h2 class="day-panel-title"><span class="day-dot day-dot--butter" aria-hidden="true"></span>便签</h2>
-            <span class="day-panel-meta">${dayNotes.length} 条</span>
-          </header>
-          ${notes}
-        </section>
-      </aside>
+      <aside class="day-sidebar" data-module-root="inbox"></aside>
       <section class="day-panel day-timeline-panel">
         <header class="day-panel-head">
           <h2 class="day-panel-title"><span class="day-dot" aria-hidden="true"></span>时间表</h2>
@@ -401,52 +335,38 @@ function renderDay() {
         ${renderDayTimeline(dayEvents)}
       </section>
     </div>
-    <p class="sr-only" aria-live="polite" data-task-live></p>
   </div>`;
 }
 
-function updateTaskState(taskId) {
-  const task = sampleTasks.find((item) => item.id === taskId);
-  if (!task) return;
-
-  const next = nextTaskStatus(statusOf(task));
-  taskStatuses.set(task.id, next);
-
-  const row = root.querySelector(`[data-task-row="${CSS.escape(task.id)}"]`);
-  if (row) {
-    row.dataset.status = next;
-    const label = row.querySelector('.task-status-label');
-    if (label) label.textContent = TASK_STATUS_LABELS[next];
-    const button = row.querySelector('[data-task-toggle]');
-    if (button) {
-      button.dataset.status = next;
-      button.setAttribute(
-        'aria-label',
-        `切换任务「${task.title}」的状态，当前${TASK_STATUS_LABELS[next]}`
-      );
-    }
+function render() {
+  if (inboxView) {
+    inboxView.destroy();
+    inboxView = null;
   }
 
-  const live = root.querySelector('[data-task-live]');
-  if (live) live.textContent = `「${task.title}」已标记为${TASK_STATUS_LABELS[next]}`;
-
-  const counts = taskStatusCounts(sampleTasks, taskStatuses);
-  const progressText = root.querySelector('[data-task-progress-text]');
-  if (progressText) progressText.textContent = `${counts.done} / ${counts.total} 完成`;
-  const fill = root.querySelector('[data-task-progress-fill]');
-  if (fill) fill.style.width = `${counts.percent}%`;
-}
-
-function render() {
   periodTitle.textContent = periodLabel();
 
   for (const button of viewButtons) {
     button.setAttribute('aria-pressed', String(button.dataset.view === state.view));
   }
 
-  if (state.view === 'month') root.innerHTML = renderMonth();
-  else if (state.view === 'week') root.innerHTML = renderWeek();
-  else root.innerHTML = renderDay();
+  if (state.view === 'month') {
+    root.innerHTML = renderMonth();
+  } else if (state.view === 'week') {
+    root.innerHTML = renderWeek();
+  } else {
+    root.innerHTML = renderDay();
+    inboxView = mountInbox({
+      root: root.querySelector('[data-module-root="inbox"]'),
+      state: { view: state.view, anchor: new Date(state.anchor) },
+      data: {
+        events: sampleEvents,
+        notes: inbox.listNotes(toDateKey(state.anchor)),
+        tasks: inbox.listTasks(),
+      },
+      services: { inbox },
+    });
+  }
 }
 
 function setView(view) {
@@ -479,12 +399,6 @@ document.addEventListener('click', (event) => {
   const viewButton = event.target.closest('.view-switch [data-view]');
   if (viewButton) {
     setView(viewButton.dataset.view);
-    return;
-  }
-
-  const taskToggle = event.target.closest('[data-task-toggle]');
-  if (taskToggle) {
-    updateTaskState(taskToggle.dataset.taskToggle);
     return;
   }
 
