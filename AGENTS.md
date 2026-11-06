@@ -48,8 +48,8 @@ src/modules/<module-name>/
  * @param {{
  *   root: HTMLElement,
  *   state: Readonly<{ view: 'month'|'week'|'day', anchor: Date }>,
- *   data: { events: CalendarEvent[], notes: StickyNote[], tasks: Task[] },
- *   services: Record<string, Function>
+ *   data: { events: CalendarEvent[], notes: StickyNote[], tasks: Task[], dailyTasks?: DailyTask[] },
+ *   services: { dailyTasks?: DailyTasksService, [name: string]: unknown }
  * }} context
  * @returns {{ update?: (context: object) => void, destroy?: () => void }}
  */
@@ -63,7 +63,7 @@ export function mount(context) {
 - 模块只依赖 `context` 和公开的纯函数（`src/calendar.js`、`src/tasks.js`）；不得 import 另一个模块的内部文件。
 - 模块不得直接修改全局状态或其它模块的 DOM；共享状态通过 `services` 或数据快照传递。
 - 模块样式必须命名空间化，禁止修改全局 `button`、`div` 等选择器。
-- 当前主干尚未导出 `services`；第一个需要共享状态的模块必须先提交最小 `services` 接口提案，不能直接 `import` `src/app.js` 的内部符号。
+- `services` 由主干按模块提案逐步导出；当前已导出 `services.dailyTasks`（每日任务模块）。新模块需要共享能力时先提交最小接口提案，不能直接 `import` `src/app.js` 的内部符号。
 - 新视图 / 新模块在主干的注册点只允许是一行注册改动；注册改动需在 PR 中标注为“接口登记点”，并附接口文档更新。
 - 模块必须自测，并在 PR 中给出 1440 / 1024 / 768 / 390 宽度下的截图或说明。
 
@@ -102,6 +102,7 @@ export function mount(context) {
 ## 7. 当前扩展点
 
 - **数据源**：替换 `src/data.js` 或按 `docs/integration.md` 接入 DataSource；不在视图模块里直接 `fetch`。
+- **每日任务**：`src/modules/daily-tasks/`；日视图通过 `[data-module-root="daily-tasks"]` 接入，共享状态走 `services.dailyTasks`，dsh 输入见 `docs/interfaces.md` 的 `window.schedule.dailyTasks` 与 `sampleDailyTasks`。
 - **新视图**：按模块契约新增；注册点改动需评审。
 - **任务状态持久化**：由数据源 / services 提供，不在 UI 模块内散落存储逻辑。
 - **日程 / 便签 CRUD、提醒、协作、多日历、时区**：当前范围外；需要需求方明确立项后再做。

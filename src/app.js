@@ -22,7 +22,8 @@ import {
   toDateKey,
   weekEventStyle,
 } from './calendar.js';
-import { sampleEvents, sampleNotes, sampleTasks } from './data.js';
+import { sampleDailyTasks, sampleEvents, sampleNotes, sampleTasks } from './data.js';
+import { createDailyTaskStore, mount as mountDailyTasks } from './modules/daily-tasks/index.js';
 import { TASK_STATUS_LABELS, nextTaskStatus, taskStatusCounts } from './tasks.js';
 
 const VIEWS = new Set(['month', 'week', 'day']);
@@ -35,6 +36,8 @@ const state = {
 };
 
 const taskStatuses = new Map(sampleTasks.map((task) => [task.id, task.status]));
+const dailyTasks = createDailyTaskStore(sampleDailyTasks);
+let dailyTasksView = null;
 
 const EVENT_DOT_COLORS = {
   blue: '#3370ff',
@@ -72,6 +75,35 @@ function readInitialState() {
   const date = parseDateKey(params.get('date'));
   if (date) state.anchor = date;
 }
+
+function currentDateKey() {
+  return toDateKey(new Date());
+}
+
+const dailyTasksApi = Object.freeze({
+  add(input) {
+    return dailyTasks.addTask(input);
+  },
+  list(date = currentDateKey()) {
+    return dailyTasks.listForDate(date);
+  },
+  getStatus(taskId, date = currentDateKey()) {
+    return dailyTasks.getStatus(taskId, date);
+  },
+  setStatus(taskId, status, date = currentDateKey()) {
+    return dailyTasks.setStatus(taskId, date, status);
+  },
+  toggle(taskId, date = currentDateKey()) {
+    return dailyTasks.toggleStatus(taskId, date);
+  },
+  subscribe(listener) {
+    return dailyTasks.subscribe(listener);
+  },
+});
+
+// Public "dsh" input interface; the calendar's manual input is the day-view
+// module's add form. Documented in docs/interfaces.md.
+window.schedule = Object.freeze({ dailyTasks: dailyTasksApi });
 
 function periodLabel() {
   if (state.view === 'month') return formatMonthTitle(state.anchor);
@@ -372,6 +404,7 @@ function renderDay() {
 
   return `<div class="day-view">
     ${renderDayWeekStrip()}
+    <div data-module-root="daily-tasks"></div>
     <div class="day-columns">
       <aside class="day-sidebar">
         <section class="day-panel day-tasks-panel">
@@ -438,6 +471,11 @@ function updateTaskState(taskId) {
 }
 
 function render() {
+  if (dailyTasksView) {
+    dailyTasksView.destroy();
+    dailyTasksView = null;
+  }
+
   periodTitle.textContent = periodLabel();
 
   for (const button of viewButtons) {
@@ -446,7 +484,20 @@ function render() {
 
   if (state.view === 'month') root.innerHTML = renderMonth();
   else if (state.view === 'week') root.innerHTML = renderWeek();
-  else root.innerHTML = renderDay();
+  else {
+    root.innerHTML = renderDay();
+    dailyTasksView = mountDailyTasks({
+      root: root.querySelector('[data-module-root="daily-tasks"]'),
+      state: { view: state.view, anchor: new Date(state.anchor) },
+      data: {
+        events: sampleEvents,
+        notes: sampleNotes,
+        tasks: sampleTasks,
+        dailyTasks: dailyTasks.listTasks(),
+      },
+      services: { dailyTasks },
+    });
+  }
 }
 
 function setView(view) {

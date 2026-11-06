@@ -1,6 +1,6 @@
 # 日程 · 对接文档
 
-版本：`0.1`
+版本：`0.2`
 配套接口：`docs/interfaces.md`
 
 本文档描述如何把「日程」接到真实数据源、如何新增模块，以及本地 / 公网预览的注意事项。当前实现是**零依赖静态页 + 示例数据**，尚未接入后端；文中标注“建议”或“尚未实现”的部分属于后续对接契约，不是现有能力。
@@ -12,8 +12,9 @@ npm start                 # 本地静态服务，默认 http://127.0.0.1:4173
 ```
 
 - 入口：`index.html` → `src/app.js`。
-- 数据：`src/data.js` 的 `sampleEvents` / `sampleNotes` / `sampleTasks`，日期相对浏览器当天。
-- 状态：视图、锚点日期、任务状态都在页面内存中；刷新后恢复示例初始值。
+- 数据：`src/data.js` 的 `sampleEvents` / `sampleNotes` / `sampleTasks` / `sampleDailyTasks`，日期相对浏览器当天。
+- 状态：视图、锚点日期、任务状态、每日任务定义与按日状态都在页面内存中；刷新后恢复示例初始值。
+- 每日任务：日视图顶部由 `src/modules/daily-tasks/` 模块渲染；定义来自 `sampleDailyTasks`，按日完成状态由 `services.dailyTasks` 保存。dsh 运行时接口为 `window.schedule.dailyTasks`。
 - 没有构建步骤、没有运行时依赖、没有网络请求。
 
 URL 参数：
@@ -31,6 +32,8 @@ URL 参数：
 1. **推荐**：先提案一个最小数据接入点（属于主干变更，按 `AGENTS.md` 评审），用 `CalendarDataSource` 替换静态 import；保持视图模块只消费数据快照。
 2. **不改主干**：新增一个模块，由模块自行取数并渲染自己的区域；但模块不能直接改写月 / 周 / 日主干的渲染逻辑。
 
+每日任务目前采用第 2 种思路的折中：`src/modules/daily-tasks/` 自己管理 store 和 UI，主干只保留一个日视图槽位和 `services.dailyTasks` 最小接口；数据定义仍从 `src/data.js` 的 `sampleDailyTasks` 同步读取。接真实后端时，优先把 store 替换为异步数据源，保持模块的 DOM / 调用契约不变。
+
 不要在视图渲染函数里直接 `fetch`；数据获取、缓存与错误处理应集中在数据源 / 模块内。
 
 ### 2.2 建议的数据源契约
@@ -41,6 +44,9 @@ interface CalendarDataSource {
   listNotes(date: string): Promise<StickyNote[]>;
   listTasks(): Promise<Task[]>;
   updateTaskStatus(id: string, status: TaskStatus): Promise<Task>;
+  listDailyTasks(date: string): Promise<Array<{ task: DailyTask; status: TaskStatus }>>;
+  addDailyTask(input: { title: string; icon?: string }): Promise<DailyTask>;
+  updateDailyTaskStatus(id: string, date: string, status: TaskStatus): Promise<TaskStatus>;
 }
 ```
 
@@ -52,6 +58,9 @@ interface CalendarDataSource {
 | `GET` | `/api/calendar/notes?date=2026-11-06` | 返回 `{ notes: StickyNote[] }` |
 | `GET` | `/api/calendar/tasks` | 返回 `{ tasks: Task[] }`（未排期 Inbox） |
 | `PATCH` | `/api/calendar/tasks/:id` | body `{ "status": "partial" }`，返回 `{ task: Task }` |
+| `GET` | `/api/calendar/daily-tasks?date=2026-11-06` | 返回 `{ dailyTasks: [{ task: DailyTask, status: TaskStatus }] }` |
+| `POST` | `/api/calendar/daily-tasks` | body `{ "title": "喝水", "icon": "💧" }`，返回 `{ task: DailyTask }` |
+| `PATCH` | `/api/calendar/daily-tasks/:id/status?date=2026-11-06` | body `{ "status": "done" }`，返回 `{ status: TaskStatus }` |
 
 错误建议统一为：
 
@@ -108,6 +117,23 @@ interface CalendarDataSource {
 }
 ```
 
+每日任务（重复定义 + 当天状态）：
+
+```json
+{
+  "dailyTasks": [
+    {
+      "task": { "id": "daily-01", "title": "喝够 8 杯水", "icon": "💧", "recurrence": "daily" },
+      "status": "done"
+    },
+    {
+      "task": { "id": "daily-02", "title": "阅读 20 分钟", "icon": "📖", "recurrence": "daily" },
+      "status": "todo"
+    }
+  ]
+}
+```
+
 字段约束、枚举和不变量见 `docs/interfaces.md`。
 
 ### 2.4 异步加载与错误处理
@@ -115,9 +141,10 @@ interface CalendarDataSource {
 接入后端时需要补上：
 
 - 首次加载 loading 状态；加载失败展示可重试的错误态，不破坏工具栏与导航。
-- 空数据态沿用现有空状态（无事件 / 无便签 / 无任务）。
+- 空数据态沿用现有空状态（无事件 / 无便签 / 无任务 / 无每日任务）。
 - 任务状态更新建议乐观更新：先改 UI，再提交 `PATCH`；失败时回滚并播报错误。
-- 范围请求只取当前视图所需区间（月视图覆盖 6 × 7 天，周视图覆盖 7 天，日视图取当天）。
+- 每日任务也建议乐观更新：先切换当天状态 / 先插入新定义，再提交请求；失败时回滚 store 并显示 `role="alert"` 错误。
+- 范围请求只取当前视图所需区间（月视图覆盖 6 × 7 天，周视图覆盖 7 天，日视图取当天，并取当天每日任务状态）。
 - 刷新后以服务端为准；本地只保留临时 UI 状态。
 
 ## 3. 新增模块
@@ -160,6 +187,32 @@ export function mount(context) {
 6. 如需在主干挂载，提交“接口登记点”改动：只允许一行注册 + 必要的 `services` 导出，并在 PR 中标注。
 7. 更新 `docs/interfaces.md` 与本文档，再请求 review。
 
+### 3.4 已落地示例：`daily-tasks`
+
+`src/modules/daily-tasks/` 是第一个按该模式接入的模块，可作为后续模块的参考：
+
+```
+src/modules/daily-tasks/
+  index.js        mount(context)：渲染日视图每日任务条与手工添加入口
+  store.js        纯逻辑：定义、按日状态、订阅
+  styles.css      .mod-daily-tasks-* 样式，index.html 中一行 <link> 加载
+  __tests__/      node:test
+  README.md       接口、不变量、dsh / 手工两个入口
+```
+
+主干改动保持最小：
+
+- `src/app.js`：引入模块、创建 store、日视图一行槽位、`mount / destroy` 生命周期、`window.schedule.dailyTasks`。
+- `index.html`：加载模块样式的一行 `<link>`。
+- `src/data.js`：新增 `sampleDailyTasks` 导出，不改原有字段。
+
+两个添加入口：
+
+- dsh：改 `sampleDailyTasks`（持久，随页面加载）或调用 `window.schedule.dailyTasks.add(...)`（会话内）。
+- 手工：日视图「每日任务」条 → `＋ 添加` → 输入标题 → `加入`（会话内）。
+
+当前没有后端，运行时新增与手工新增刷新后不保留；需要持久化时先按下一节替换数据源。
+
 ## 4. 本地与公网预览
 
 - 本地：`npm start` 启动零依赖静态服务；仅供开发。
@@ -181,6 +234,7 @@ export function mount(context) {
 - [ ] 对接方式、错误态、空态、回滚策略已说明。
 - [ ] `npm test` 通过；新增纯逻辑有测试。
 - [ ] 三视图与任务状态交互回归通过。
+- [ ] 每日任务：手工添加、空输入、跨日重置、dsh API、刷新后会话数据回退已检查。
 - [ ] 1440 / 1024 / 768 / 390 无横向溢出、无 console error。
 - [ ] UI 改动附 Before/After 截图。
 - [ ] 未提交设计备选、临时预览或敏感信息。
