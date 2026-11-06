@@ -1,0 +1,11 @@
+{
+  "name": "schedule-calendar",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "日程安排最小闭环：月 / 周 / 天基础日历视图",
+  "scripts": {
+    "start": "node scripts/serve.mjs",
+    "test": "node --test"
+  }
+}
