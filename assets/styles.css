@@ -852,6 +852,7 @@ button {
 }
 
 .task-check {
+  position: relative;
   display: grid;
   place-items: center;
   flex: none;
@@ -870,6 +871,13 @@ button {
 .task-check:hover {
   border-color: var(--d-coral-deep);
   transform: scale(1.06);
+}
+
+.task-check::after {
+  content: "";
+  position: absolute;
+  inset: -8px;
+  border-radius: 50%;
 }
 
 .task-check svg {
