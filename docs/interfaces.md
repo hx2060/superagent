@@ -10,7 +10,7 @@
 ```
 src/calendar.js    纯日期 / 网格 / 时间布局函数（无 DOM、无副作用）
 src/tasks.js       任务三态与进度统计（无 DOM）
-src/data.js        当前静态示例数据（可被数据源替换）
+src/data.js        空白种子数据（首次加载无示例内容，可被数据源替换）
 src/app.js         应用控制器：状态、视图分发、DOM 事件
 src/modules/inbox/ 清单 / 便签编辑模块（store + 面板渲染 + 模块样式）
 index.html         页面骨架与工具栏
@@ -79,11 +79,11 @@ interface Task {
 - 清单任务标题 1–80 个字符，便签文本 1–200 个字符；首尾空白会被去掉。
 - 任务时间：`start` 为 07:00–20:59 的 `HH:mm`，`duration` 为 5–720 分钟的整数，结束时间不得晚于 21:00（日视图时间表范围）。
 - 未填时间的任务不绑定日期，仍是全局 Inbox；填写时间后绑定 `date`，日视图时间表按该日派生事件展示。
-- 清单 / 便签的新增、修改、删除只保存在当前页面会话（内存 store），刷新后恢复示例数据。
+- 清单 / 便签的新增、修改、删除只保存在当前页面会话（内存 store），刷新后恢复空白初始状态。
 
 ### 2.4 示例数据
 
-`src/data.js` 导出 `sampleEvents`、`sampleNotes`、`sampleTasks`，日期相对浏览器当天（`relativeDay(offset)`）。示例只用于本地演示，不含真实用户数据。
+`src/data.js` 导出 `sampleEvents`、`sampleNotes`、`sampleTasks`，当前均为空数组：按需求方要求首次加载不显示示例内容，日程 / 清单 / 便签都从空白开始，通过 UI 新增。文件仍保留为数据源替换点；任何示例数据不得包含真实用户隐私、飞书私有内容、凭据或 token。
 
 ## 3. 纯函数接口
 
