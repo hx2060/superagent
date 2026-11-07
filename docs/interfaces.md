@@ -1,6 +1,6 @@
 # 日程 · 接口说明
 
-版本：`0.3`（PR #3 主干基线 + 每日任务模块 + 清单 / 便签编辑与任务时间同步）
+版本：`0.4`（PR #3 主干基线 + 每日任务模块 + 清单 / 便签编辑、任务时间同步与可选截止日期）
 适用范围：当前静态实现、后续模块与后端对接
 
 本文档说明「日程」当前**已经实现**的模块接口、数据契约与 DOM 契约，以及预留的扩展接口。接口变更必须同步修改本文档，并按 `AGENTS.md` 的规则评审。
@@ -83,8 +83,10 @@ interface Task {
   start?: string;             // 可选：HH:mm
   duration?: number;          // 可选：持续分钟，5–720
   end?: string;               // 派生字段：start + duration，仅读取
+  due?: string;               // 可选：YYYY-MM-DD，截止日期；仅展示
 }
 // 不填 date / start / duration 时是未排期 Inbox；填写后绑定该日并同步到日视图时间表。
+// due 只表示截止日期，不绑定清单任务的视图日期，也不影响时间表。
 
 interface DailyTask {
   id: string;                 // 集合内唯一
@@ -96,7 +98,7 @@ interface DailyTask {
 // statuses[YYYY-MM-DD][taskId] = TaskStatus，缺省 todo。
 ```
 
-新增任务时 `status = todo`，`icon` 缺省为 `📝`；时间字段可同时缺省；只要填写其一，就必须同时填写 `start` 和 `duration`，并带合法 `date`。新增便签时 `tone` 按当天已有便签数量在 `yellow → pink → blue` 间轮换，`tilt` 同步轮换。
+新增任务时 `status = todo`，`icon` 缺省为 `📝`；时间字段可同时缺省；只要填写其一，就必须同时填写 `start` 和 `duration`，并带合法 `date`；`due` 可独立缺省，填写时必须是合法日期。新增便签时 `tone` 按当天已有便签数量在 `yellow → pink → blue` 间轮换，`tilt` 同步轮换。
 
 **每日任务与 Inbox 的关系**：`Task` 默认是未排期的全局 Inbox；填写时间后绑定日期并派生时间表事件。`DailyTask` 是每天重新出现的重复任务，状态按日期隔离，不占用时间表。两组任务共用 `TaskStatus` 枚举与循环顺序。
 
@@ -110,6 +112,7 @@ interface DailyTask {
 - 任务状态切换顺序固定：`todo → partial → done → todo`；完成进度只统计 `done / total`。
 - 清单任务标题 1–80 个字符，便签文本 1–200 个字符；首尾空白会被去掉。
 - 任务时间：`start` 为 07:00–20:59 的 `HH:mm`，`duration` 为 5–720 分钟的整数，结束时间不得晚于 21:00。
+- 任务截止日期：`due` 可选，必须是真实的 `YYYY-MM-DD`；只用于清单行展示，不绑定任务日期、不进入时间表。
 - 未填时间的任务不绑定日期，仍是全局 Inbox；填写时间后绑定 `date`，日视图时间表按该日派生事件展示。
 - `DailyTask.recurrence` 固定为 `daily`；定义没有日期字段，日期只用于读取/写入当天的完成状态；跨天默认回到 `todo`。
 - 每日任务只在日视图展示和手工添加；月 / 周视图不展示每日任务条。
@@ -175,14 +178,14 @@ interface DailyTask {
 | `TASK_SCHEDULE_START` / `TASK_SCHEDULE_END` | 07:00 / 21:00 对应分钟数；任务开始时间须落在此范围内 |
 | `DEFAULT_TASK_ICON` | `📝` |
 | `NOTE_TONES` / `NOTE_TILTS` | 便签颜色与倾斜轮换表 |
-| `normalizeTaskTitle` / `normalizeNoteText` | 去空白并校验，非法时抛出带 `code` 的 `Error` |
+| `normalizeTaskTitle` / `normalizeTaskDue` / `normalizeNoteText` | 去空白并校验，非法时抛出带 `code` 的 `Error` |
 
 store 方法：
 
 | 方法 | 说明 |
 | --- | --- |
 | `listTasks()` | 带当前状态的任务副本，按加入顺序；定时任务带派生 `end` |
-| `addTask({ title, icon?, date?, start?, duration? })` / `updateTask(id, { title?, icon?, date?, start?, duration? })` / `deleteTask(id)` | 任务增改删；时间字段清空即移出时间表 |
+| `addTask({ title, icon?, date?, start?, duration?, due? })` / `updateTask(id, { title?, icon?, date?, start?, duration?, due? })` / `deleteTask(id)` | 任务增改删；时间字段清空即移出时间表；`due` 传空即清除截止日期 |
 | `taskStatus(id)` / `setTaskStatus(id, status)` / `cycleTaskStatus(id)` | 三态读取、设置、循环 |
 | `taskProgress()` | `{ total, todo, partial, done, percent }` |
 | `listCalendarEvents(date)` | 把该日定时任务转成时间表事件：`{ id: 'task-event-<id>', title, date, start, end, color: 'teal', icon: 'doc', note: '清单任务 · <状态>' }`；无时间任务不返回 |
@@ -190,7 +193,7 @@ store 方法：
 | `addNote({ date, text })` / `updateNote(id, { text? })` / `deleteNote(id)` | 便签增改删 |
 | `subscribe(listener)` | 变更订阅，返回取消函数 |
 
-错误码：`INBOX_TASK_TITLE_INVALID`、`INBOX_NOTE_TEXT_INVALID`、`INBOX_NOTE_DATE_INVALID`、`INBOX_TASK_SCHEDULE_INVALID`、`INBOX_TASK_NOT_FOUND`、`INBOX_NOTE_NOT_FOUND`、`INBOX_TASK_STATUS_INVALID`。
+错误码：`INBOX_TASK_TITLE_INVALID`、`INBOX_NOTE_TEXT_INVALID`、`INBOX_NOTE_DATE_INVALID`、`INBOX_TASK_SCHEDULE_INVALID`、`INBOX_TASK_DUE_INVALID`、`INBOX_TASK_NOT_FOUND`、`INBOX_NOTE_NOT_FOUND`、`INBOX_TASK_STATUS_INVALID`。
 
 ### 3.4 `src/modules/daily-tasks/store.js`
 
@@ -234,6 +237,7 @@ store 方法：
 | `[data-action="prev" / "next" / "today"]` | 上一段 / 下一段 / 回到今天 |
 | `[data-open-date="YYYY-MM-DD"]` | 任意日期入口（月格、周表头、日视图周条），点击进入该日的日视图 |
 | `[data-task-row="<id>"]` | 清单任务行，`data-status` 为当前状态，`data-scheduled` 表示是否同步到时间表 |
+| `[data-task-due="YYYY-MM-DD"]` | 清单任务行内的截止日期标签，仅在任务带 `due` 时出现 |
 | `[data-task-toggle="<id>"]` | 状态切换按钮；点击循环三态 |
 | `[data-task-progress-text]` | `done / total 完成` 文本 |
 | `[data-task-progress-fill]` | 完成度进度条宽度 |
@@ -261,6 +265,7 @@ store 方法：
 - 行 `data-status`、按钮 `data-status`、状态文案 `待完成 / 部分完成 / 完成`、进度文本与进度条在同一帧更新。
 - 状态变化向 `[data-task-live]` 写入 `「<title>」已标记为<label>`，供读屏器播报。
 - 不填时间的任务为未排期 Inbox，不绑定日期；填写时间后绑定日期并同步到该日时间表。
+- 带 `due` 的任务行在状态文案下显示「截止 11月8日 周日」；截止日期不改变状态、进度或时间表。
 
 ### 4.4 每日任务 UI 契约
 
@@ -283,6 +288,7 @@ store 方法：
 - 任务表单的「开始」和「持续（分钟）」均可留空；只填一项会提示错误。填写后行内显示时间，且日视图时间表追加对应事件；清空两项即移出时间表。
 - 新增定时任务使用当前日视图日期；编辑已有定时任务时保留原日期（当前没有改日期入口）。定时任务仍显示在全局清单，只在所属日期的时间表出现。
 - 时间表事件由 `services.inbox.listCalendarEvents(date)` 派生，主干 store 订阅后局部刷新时间表，不重挂侧栏；重叠事件按 `layoutOverlaps` 分列显示。
+- 截止日期通过种子数据或 `services.inbox.addTask / updateTask` 的 `due` 写入并在行内展示；当前新增 / 编辑表单不提供日期输入，也不支持在 UI 内修改或清除已有截止日期。
 
 ## 5. 扩展接口
 
@@ -332,8 +338,8 @@ interface ScheduleModule<Data, Services> {
 ```ts
 interface InboxService {
   listTasks(): Task[];
-  addTask(input: { title: string; icon?: string; date?: string; start?: string; duration?: number }): Task;
-  updateTask(id: string, input: { title?: string; icon?: string; date?: string; start?: string; duration?: number }): Task;
+  addTask(input: { title: string; icon?: string; date?: string; start?: string; duration?: number; due?: string }): Task;
+  updateTask(id: string, input: { title?: string; icon?: string; date?: string; start?: string; duration?: number; due?: string }): Task;
   deleteTask(id: string): Task;
   taskStatus(id: string): TaskStatus;
   setTaskStatus(id: string, status: TaskStatus): TaskStatus;
@@ -416,8 +422,8 @@ interface CalendarDataSource {
   listNotes(date: string): Promise<StickyNote[]>;
   listTasks(): Promise<Task[]>;
   updateTaskStatus(id: string, status: TaskStatus): Promise<Task>;
-  createTask(input: { title: string; icon?: string; date?: string; start?: string; duration?: number }): Promise<Task>;
-  updateTask(id: string, input: { title?: string; icon?: string; date?: string; start?: string; duration?: number }): Promise<Task>;
+  createTask(input: { title: string; icon?: string; date?: string; start?: string; duration?: number; due?: string }): Promise<Task>;
+  updateTask(id: string, input: { title?: string; icon?: string; date?: string; start?: string; duration?: number; due?: string }): Promise<Task>;
   deleteTask(id: string): Promise<void>;
   createNote(input: { date: string; text: string }): Promise<StickyNote>;
   updateNote(id: string, input: { text: string }): Promise<StickyNote>;
@@ -451,7 +457,7 @@ window.schedule.dailyTasks.getStatus('daily-01', '2026-11-06');
 
 ## 6. 版本与兼容
 
-- 当前接口版本 `0.3`；0.2 增量加入 `DailyTask`、`DailyTasksService`、`window.schedule.dailyTasks` 与每日任务 DOM；0.3 增量加入清单 / 便签 CRUD、任务可选时间字段与日视图时间表派生事件。已发布字段与稳定选择器保持不变。
+- 当前接口版本 `0.4`；0.2 增量加入 `DailyTask`、`DailyTasksService`、`window.schedule.dailyTasks` 与每日任务 DOM；0.3 增量加入清单 / 便签 CRUD、任务可选时间字段与日视图时间表派生事件；0.4 增量加入任务可选 `due` 截止日期与行内展示。已发布字段与稳定选择器保持不变。
 - 新增字段必须可选，渲染层对未知可选字段保持忽略。
 - 颜色 / 图标 / 状态枚举新增时，需要同时补样式与回退；删除或重命名属于 breaking change。
 - 破坏性接口变更必须升级版本、更新本文档与 `docs/integration.md`，并在 PR 中明确迁移方案。

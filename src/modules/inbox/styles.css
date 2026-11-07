@@ -204,6 +204,19 @@
   white-space: nowrap;
 }
 
+.mod-inbox-task-due {
+  overflow: hidden;
+  color: #b07a33;
+  font-size: 9.5px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.day-task[data-status="done"] .mod-inbox-task-due {
+  color: #b9a39c;
+}
+
 .mod-inbox-form-actions {
   display: flex;
   justify-content: flex-end;
