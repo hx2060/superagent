@@ -231,7 +231,39 @@ test('任务：不填时间时只留在清单，不进入时间表', () => {
   assert.equal(task.start, undefined);
   assert.equal(task.duration, undefined);
   assert.equal(task.end, undefined);
+  assert.equal(task.due, undefined);
   assert.equal(store.listCalendarEvents('2026-11-06').length, 0);
+});
+
+test('任务：可选截止日期会保留、规范化并可清空，非法日期被拒绝', () => {
+  const store = createInboxStore({
+    tasks: [
+      {
+        id: 'task-due-seed',
+        title: '整理资料',
+        icon: '📄',
+        status: 'todo',
+        due: '2026-11-08',
+      },
+    ],
+    idFactory: testIds(),
+  });
+  assert.equal(store.listTasks()[0].due, '2026-11-08');
+
+  const added = store.addTask({ title: '写周报', due: ' 2026-11-08 ' });
+  assert.equal(added.due, '2026-11-08');
+
+  const cleared = store.updateTask(added.id, { due: '' });
+  assert.equal(cleared.due, undefined);
+
+  assert.throws(
+    () => store.updateTask(added.id, { due: '2026-02-30' }),
+    (error) => error.code === 'INBOX_TASK_DUE_INVALID'
+  );
+  assert.throws(
+    () => store.addTask({ title: '坏日期', due: '周日' }),
+    (error) => error.code === 'INBOX_TASK_DUE_INVALID'
+  );
 });
 
 test('任务：时间字段必须成对填写，且开始、持续、结束需合法', () => {

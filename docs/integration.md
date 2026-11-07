@@ -1,6 +1,6 @@
 # 日程 · 对接文档
 
-版本：`0.3`
+版本：`0.4`
 配套接口：`docs/interfaces.md`
 
 本文档描述如何把「日程」接到真实数据源、如何新增模块，以及本地 / 公网预览的注意事项。当前实现是**零依赖静态页 + 空白种子数据**，尚未接入后端；文中标注“建议”或“尚未实现”的部分属于后续对接契约，不是现有能力。
@@ -46,8 +46,8 @@ interface CalendarDataSource {
   listNotes(date: string): Promise<StickyNote[]>;
   listTasks(): Promise<Task[]>;
   updateTaskStatus(id: string, status: TaskStatus): Promise<Task>;
-  createTask(input: { title: string; icon?: string; date?: string; start?: string; duration?: number }): Promise<Task>;
-  updateTask(id: string, input: { title?: string; icon?: string; date?: string; start?: string; duration?: number }): Promise<Task>;
+  createTask(input: { title: string; icon?: string; date?: string; start?: string; duration?: number; due?: string }): Promise<Task>;
+  updateTask(id: string, input: { title?: string; icon?: string; date?: string; start?: string; duration?: number; due?: string }): Promise<Task>;
   deleteTask(id: string): Promise<void>;
   createNote(input: { date: string; text: string }): Promise<StickyNote>;
   updateNote(id: string, input: { text: string }): Promise<StickyNote>;
@@ -65,8 +65,8 @@ interface CalendarDataSource {
 | `GET` | `/api/calendar/events?from=2026-11-02&to=2026-11-08` | 返回 `{ events: CalendarEvent[] }` |
 | `GET` | `/api/calendar/notes?date=2026-11-06` | 返回 `{ notes: StickyNote[] }` |
 | `GET` | `/api/calendar/tasks` | 返回 `{ tasks: Task[] }`（未排期 Inbox） |
-| `POST` | `/api/calendar/tasks` | body `{ "title": "整理桌面" }` 或 `{ "title": "写方案", "date": "2026-11-06", "start": "09:30", "duration": 45 }`，返回 `{ task: Task }` |
-| `PATCH` | `/api/calendar/tasks/:id` | body `{ "status": "partial" }`、`{ "title": "..." }` 或时间字段；清空时间用 `{ "start": "", "duration": "" }`，返回 `{ task: Task }` |
+| `POST` | `/api/calendar/tasks` | body `{ "title": "整理桌面" }`、`{ "title": "写方案", "date": "2026-11-06", "start": "09:30", "duration": 45 }` 或带可选 `{ "due": "2026-11-08" }`，返回 `{ task: Task }` |
+| `PATCH` | `/api/calendar/tasks/:id` | body `{ "status": "partial" }`、`{ "title": "..." }`、时间字段或 `{ "due": "2026-11-08" }`；清空时间用 `{ "start": "", "duration": "" }`，清空截止日期用 `{ "due": "" }`，返回 `{ task: Task }` |
 | `DELETE` | `/api/calendar/tasks/:id` | 删除任务 |
 | `POST` | `/api/calendar/notes` | body `{ "date": "2026-11-06", "text": "..." }`，返回 `{ note: StickyNote }` |
 | `PATCH` | `/api/calendar/notes/:id` | body `{ "text": "..." }`，返回 `{ note: StickyNote }` |
@@ -120,12 +120,12 @@ interface CalendarDataSource {
 }
 ```
 
-任务（全局 Inbox，无日期）：
+任务（全局 Inbox，无日期；`due` 为可选截止日期）：
 
 ```json
 {
   "tasks": [
-    { "id": "task-1", "title": "整理评审意见", "icon": "📝", "status": "partial" }
+    { "id": "task-1", "title": "整理评审意见", "icon": "📝", "status": "partial", "due": "2026-11-08" }
   ]
 }
 ```

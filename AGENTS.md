@@ -105,5 +105,5 @@ export function mount(context) {
 - **每日任务**：`src/modules/daily-tasks/`；日视图通过 `[data-module-root="daily-tasks"]` 接入，共享状态走 `services.dailyTasks`，dsh 输入见 `docs/interfaces.md` 的 `window.schedule.dailyTasks` 与 `sampleDailyTasks`。
 - **新视图**：按模块契约新增；注册点改动需评审。
 - **任务状态持久化**：由数据源 / services 提供，不在 UI 模块内散落存储逻辑。
-- **清单 / 便签 CRUD**：已由 `src/modules/inbox` 提供（新增、修改、删除；页面会话内有效，无持久化）；清单任务可选时间并同步到日视图时间表。持久化仍由数据源 / services 提供。
+- **清单 / 便签 CRUD**：已由 `src/modules/inbox` 提供（新增、修改、删除；页面会话内有效，无持久化）；清单任务可选时间并同步到日视图时间表，也可带可选截止日期；持久化仍由数据源 / services 提供。
 - **日程 CRUD、提醒、协作、多日历、时区**：当前范围外；需要需求方明确立项后再做。

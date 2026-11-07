@@ -28,6 +28,7 @@ export {
   TASK_TITLE_MAX_LENGTH,
   createInboxStore,
   normalizeNoteText,
+  normalizeTaskDue,
   normalizeTaskTitle,
 } from './store.js';
 
@@ -38,6 +39,13 @@ const SCHEDULE_START_MAX = '20:59';
 function formatDateLabel(dateKey) {
   const date = parseDateKey(dateKey);
   return date ? `${date.getMonth() + 1}月${date.getDate()}日` : dateKey;
+}
+
+function formatDueLabel(dateKey) {
+  const date = parseDateKey(dateKey);
+  if (!date) return '';
+  const weekday = '日一二三四五六'[date.getDay()];
+  return `截止 ${date.getMonth() + 1}月${date.getDate()}日 周${weekday}`;
 }
 
 function escapeHtml(value) {
@@ -215,11 +223,13 @@ export function mount(context) {
     }
 
     const confirming = pendingDelete?.kind === 'task' && pendingDelete.id === task.id;
+    const dueLabel = task.due ? formatDueLabel(task.due) : '';
     return `<li class="day-task mod-inbox-task" data-task-row="${id}" data-status="${status}" data-scheduled="${task.start ? 'true' : 'false'}">
       <span class="task-emoji" aria-hidden="true">${escapeHtml(task.icon)}</span>
       <span class="task-body">
         <span class="task-title">${title}</span>
         <span class="task-status-label">${label}</span>
+        ${dueLabel ? `<span class="mod-inbox-task-due" data-task-due="${escapeHtml(task.due)}">${escapeHtml(dueLabel)}</span>` : ''}
         ${task.start ? `<span class="mod-inbox-task-when">${escapeHtml(taskScheduleLabel(task))}</span>` : ''}
       </span>
       <span class="mod-inbox-actions">

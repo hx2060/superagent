@@ -93,6 +93,14 @@ export function normalizeTaskTitle(value) {
   return title;
 }
 
+export function normalizeTaskDue(value) {
+  const text = String(value ?? '').trim();
+  if (!text) return null;
+  const parsed = parseDateKey(text);
+  if (!parsed) throw invalid('INBOX_TASK_DUE_INVALID', '截止日期必须是 YYYY-MM-DD');
+  return toDateKey(parsed);
+}
+
 export function normalizeNoteText(value) {
   const text = String(value ?? '').replace(/\r\n?/g, '\n').trim();
   if (!text) throw invalid('INBOX_NOTE_TEXT_INVALID', '便签内容不能为空');
@@ -124,7 +132,8 @@ function createDefaultIdFactory() {
  *   date?: string,
  *   start?: string,
  *   duration?: number,
- *   end?: string
+ *   end?: string,
+ *   due?: string
  * }} InboxTask
  *
  * @typedef {{
@@ -183,9 +192,10 @@ export function createInboxStore({ tasks = [], notes = [], idFactory } = {}) {
     return statuses.get(id) ?? 'todo';
   }
 
-  function addTask({ title, icon, date, start, duration } = {}) {
+  function addTask({ title, icon, date, start, duration, due } = {}) {
     const titleText = normalizeTaskTitle(title);
     const schedule = normalizeSchedule({ date, start, duration });
+    const dueDate = normalizeTaskDue(due);
     const task = {
       id: '',
       title: titleText,
@@ -193,6 +203,7 @@ export function createInboxStore({ tasks = [], notes = [], idFactory } = {}) {
       status: 'todo',
     };
     if (schedule) Object.assign(task, schedule);
+    if (dueDate) task.due = dueDate;
     do {
       task.id = nextId('task');
     } while (taskItems.some((item) => item.id === task.id));
@@ -206,6 +217,15 @@ export function createInboxStore({ tasks = [], notes = [], idFactory } = {}) {
     const { task } = findTask(id);
     if (changes.title !== undefined) task.title = normalizeTaskTitle(changes.title);
     if (changes.icon !== undefined) task.icon = normalizeTaskIcon(changes.icon);
+
+    if (Object.prototype.hasOwnProperty.call(changes, 'due')) {
+      const dueDate = normalizeTaskDue(changes.due);
+      if (dueDate) {
+        task.due = dueDate;
+      } else {
+        delete task.due;
+      }
+    }
 
     const hasScheduleField = ['date', 'start', 'duration'].some((key) =>
       Object.prototype.hasOwnProperty.call(changes, key)
