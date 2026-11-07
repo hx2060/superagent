@@ -22,7 +22,7 @@ import {
   toDateKey,
   weekEventStyle,
 } from '../src/calendar.js';
-import { TASK_STATUS_LABELS, nextTaskStatus, taskStatusCounts } from '../src/tasks.js';
+import { TASK_STATUS_LABELS, nextTaskStatus, taskMonthAnchors, taskStatusCounts } from '../src/tasks.js';
 
 const date = (year, month, day) => new Date(year, month - 1, day);
 
@@ -189,4 +189,25 @@ test('task status counts drive the checklist progress', () => {
     done: 0,
     percent: 0,
   });
+});
+
+test('taskMonthAnchors adds the start-today and deadline chips', () => {
+  assert.deepEqual(taskMonthAnchors({ due: '2026-11-08' }, '2026-11-07'), [
+    { key: '2026-11-07', due: false },
+    { key: '2026-11-08', due: true },
+  ]);
+  assert.deepEqual(taskMonthAnchors({ due: '2026-11-07' }, '2026-11-07'), [
+    { key: '2026-11-07', due: true },
+  ]);
+  assert.deepEqual(taskMonthAnchors({ due: '2026-11-05' }, '2026-11-07'), [
+    { key: '2026-11-05', due: true },
+  ]);
+  assert.deepEqual(taskMonthAnchors({ date: '2026-11-02', due: '2026-11-08' }, '2026-11-07'), [
+    { key: '2026-11-02', due: false },
+    { key: '2026-11-08', due: true },
+  ]);
+  assert.deepEqual(taskMonthAnchors({ date: '2026-11-02', due: '2026-11-02' }, '2026-11-07'), [
+    { key: '2026-11-02', due: false },
+  ]);
+  assert.deepEqual(taskMonthAnchors({}, '2026-11-07'), []);
 });

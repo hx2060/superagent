@@ -28,6 +28,7 @@ import {
   sampleNotes,
   sampleTasks,
 } from './data.js';
+import { taskMonthAnchors } from './tasks.js';
 import { createDailyTaskStore, mount as mountDailyTasks } from './modules/daily-tasks/index.js';
 import { createInboxStore, mount as mountInbox } from './modules/inbox/index.js';
 import { mount as mountWeekChart } from './modules/week-chart/index.js';
@@ -190,12 +191,15 @@ function monthItems() {
   for (const event of events) {
     add(event.date, timeToMinutes(event.start), eventChip(event));
   }
+  const todayKey = toDateKey(today);
   for (const task of inbox.listTasks()) {
-    if (task.date) {
-      add(task.date, task.start ? timeToMinutes(task.start) : 0, taskChip(task, false));
-    }
-    if (task.due && task.due !== task.date) {
-      add(task.due, 24 * 60, taskChip(task, true));
+    for (const anchor of taskMonthAnchors(task, todayKey)) {
+      const sort = anchor.due
+        ? 24 * 60
+        : task.start && task.date === anchor.key
+          ? timeToMinutes(task.start)
+          : 0;
+      add(anchor.key, sort, taskChip(task, anchor.due));
     }
   }
   for (const items of map.values()) items.sort((a, b) => a.sort - b.sort);

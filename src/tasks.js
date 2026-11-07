@@ -26,3 +26,27 @@ export function taskStatusCounts(tasks, statuses) {
   const percent = counts.total === 0 ? 0 : Math.round((counts.done / counts.total) * 100);
   return { ...counts, percent };
 }
+
+/**
+ * Month-view anchors for one task.
+ *
+ * - A dated task appears on its date and, when the deadline differs, on the
+ *   deadline day.
+ * - A deadline-only task starts TODAY (so the month no longer shows it only at
+ *   the deadline) and also appears on the deadline day.
+ * - A past deadline, or a deadline equal to today, keeps only the deadline day.
+ *
+ * @param {{ date?: string, due?: string }} task
+ * @param {string} todayKey local YYYY-MM-DD
+ * @returns {Array<{ key: string, due: boolean }>}
+ */
+export function taskMonthAnchors(task, todayKey) {
+  if (!task || typeof task !== 'object') return [];
+  const anchors = [];
+  if (task.date) anchors.push({ key: task.date, due: false });
+  if (task.due) {
+    if (!task.date && task.due > todayKey) anchors.push({ key: todayKey, due: false });
+    if (task.due !== task.date) anchors.push({ key: task.due, due: true });
+  }
+  return anchors;
+}
