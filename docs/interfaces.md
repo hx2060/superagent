@@ -111,7 +111,7 @@ interface DailyTask {
 - `start < end`；日视图时间表裁切到 07:00–21:00，周图方块按天定位、不按小时裁切，月视图仍按日期展示。
 - 标题、便签、备注按纯文本处理；不要传 HTML，渲染层会转义。
 - 月 / 周 / 日视图读取同一份清单任务与事件；日视图还读取当天便签与每日任务定义。
-- 周图一个任务一行（定时日程也各占一行）：定时任务占开始当天，带 `due` 时从 `date` 跨到截止日；仅截止任务占截止当天；方块内显示准确时间或截止日。
+- 周图一个任务一行（定时日程也各占一行）：定时任务占开始当天，带 `due` 时从 `date` 跨到截止日；仅截止任务从今天画到截止日（截止日已过时占截止当天）；方块内显示准确时间或截止日。
 - 月视图在任务 `date` 当天显示任务 chip；`due` 与 `date` 不同时在截止日额外显示「截止」chip。
 - 任务状态切换顺序固定：`todo → partial → done → todo`；完成进度只统计 `done / total`。
 - 清单任务标题 1–80 个字符，便签文本 1–200 个字符；首尾空白会被去掉。
@@ -222,11 +222,11 @@ store 方法：
 
 ### 3.5 `src/modules/week-chart/chart.js`
 
-周图的纯几何与行模型（无 DOM）。方块按**天**定位：任务从 `date` 到 `due`（含）跨天，仅截止任务占截止当天；准确时间显示在方块文本与行标签里。
+周图的纯几何与行模型（无 DOM）。方块按**天**定位：任务从 `date` 到 `due`（含）跨天；仅截止任务从今天（或可见周起点）画到截止日，截止日已过时占截止当天；准确时间显示在方块文本与行标签里。
 
 | 导出 | 说明 |
 | --- | --- |
-| `taskChartBar(task, weekStartKey)` | 计算任务方块的 `{ left, width, startDay, endDay, openDate, clippedStart, clippedEnd, label }`；无日期 / 截止或完全不在本周返回 `null` |
+| `taskChartBar(task, weekStartKey, todayKey?)` | 计算任务方块的 `{ left, width, startDay, endDay, openDate, clippedStart, clippedEnd, label }`；仅截止任务以 `todayKey` 为起点画到截止日，`todayKey` 缺省或截止日已过时占截止当天；无日期 / 截止或完全不在本周返回 `null` |
 | `eventChartBar(event, weekStartKey)` | 计算定时日程方块（占一天）；时间非法或不在本周返回 `null` |
 | `buildWeekChart({ anchor, tasks, events, today })` | 返回 `{ days, rows, summary }`；`rows` 按开始位置排序，`summary` 为本周任务完成进度 |
 

@@ -33,7 +33,7 @@ test('周图：单日定时任务占一天，并显示准确时间', () => {
   assert.equal(bar.clippedEnd, false);
 });
 
-test('周图：只有截止日期的任务占满截止当天', () => {
+test('周图：缺省 todayKey 时，只有截止日期的任务占满截止当天', () => {
   const bar = taskChartBar(task({ due: '2026-11-06' }), WEEK_START);
   near(bar.left, 4 / 7);
   near(bar.width, 1 / 7);
@@ -41,6 +41,38 @@ test('周图：只有截止日期的任务占满截止当天', () => {
   assert.equal(bar.endDay, 4);
   assert.equal(bar.label, '截止 11/6');
   assert.equal(bar.openDate, '2026-11-06');
+});
+
+test('周图：只有截止日期的任务从今天延伸到截止日', () => {
+  const bar = taskChartBar(task({ due: '2026-11-08' }), WEEK_START, '2026-11-07');
+  near(bar.left, 5 / 7);
+  near(bar.width, 2 / 7);
+  assert.equal(bar.startDay, 5);
+  assert.equal(bar.endDay, 6);
+  assert.equal(bar.label, '截止 11/8');
+  assert.equal(bar.openDate, '2026-11-08');
+  assert.equal(bar.clippedStart, false);
+  assert.equal(bar.clippedEnd, false);
+});
+
+test('周图：今天在本周之前时，截止任务方块从可见周起点开始', () => {
+  const bar = taskChartBar(task({ due: '2026-11-04' }), WEEK_START, '2026-11-01');
+  near(bar.left, 0);
+  near(bar.width, 3 / 7);
+  assert.equal(bar.startDay, 0);
+  assert.equal(bar.endDay, 2);
+  assert.equal(bar.clippedStart, true);
+  assert.equal(bar.openDate, '2026-11-04');
+});
+
+test('周图：截止日已过或今天已在周之外时保持原规则', () => {
+  const overdue = taskChartBar(task({ due: '2026-11-05' }), WEEK_START, '2026-11-07');
+  near(overdue.left, 3 / 7);
+  near(overdue.width, 1 / 7);
+  assert.equal(overdue.startDay, 3);
+  assert.equal(overdue.openDate, '2026-11-05');
+
+  assert.equal(taskChartBar(task({ due: '2026-11-12' }), WEEK_START, '2026-11-10'), null);
 });
 
 test('周图：开始日期到截止日期跨越多天', () => {
@@ -139,6 +171,18 @@ test('周图：整周模型包含任务、日程、排序、进度与今天标�
   assert.equal(model.rows[0].status, 'done');
   assert.equal(model.rows[2].kind, 'event');
   assert.equal(model.rows[2].color, 'violet');
+});
+
+test('周图：整周模型把截止任务从今天画到截止日', () => {
+  const model = buildWeekChart({
+    anchor: new Date(2026, 10, 4),
+    today: new Date(2026, 10, 7),
+    tasks: [task({ due: '2026-11-08' })],
+  });
+  assert.equal(model.rows.length, 1);
+  near(model.rows[0].bar.left, 5 / 7);
+  near(model.rows[0].bar.width, 2 / 7);
+  assert.deepEqual(model.summary, { total: 1, done: 0, percent: 0 });
 });
 
 test('周图：过期未完成任务标记为 overdue，完成后不再标记', () => {

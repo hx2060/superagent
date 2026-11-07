@@ -76,24 +76,38 @@ function taskEndClock(task) {
  */
 
 /**
- * Geometry + label for one task. A task with a start date and a later deadline
- * spans both days; a task with only a deadline occupies the deadline day.
+ * Geometry + label for one task.
+ *
+ * - A task with a start date and a later deadline spans both days.
+ * - A task with a start date and no deadline occupies the start day.
+ * - A task with only a deadline starts TODAY (the supplied `todayKey`) and
+ *   spans to the deadline, so it becomes a long block from today to the due
+ *   date. Past deadlines and the legacy no-today call keep the deadline day.
+ *
  * Returns null when it has no date / deadline or falls completely outside the
  * rendered week.
  *
  * @param {object} task
  * @param {string} weekStartKey
+ * @param {string|null} [todayKey] local YYYY-MM-DD used as the start of a
+ *   deadline-only block when the deadline is today or later
  * @returns {WeekChartBar|null}
  */
-export function taskChartBar(task, weekStartKey) {
+export function taskChartBar(task, weekStartKey, todayKey = null) {
   if (!task || typeof task !== 'object') return null;
   const hasDate = typeof task.date === 'string' && Boolean(parseDateKey(task.date));
   const hasDue = typeof task.due === 'string' && Boolean(parseDateKey(task.due));
   if (!hasDate && !hasDue) return null;
 
   const dateOnly = hasDate && !task.start;
+  const dueOnly = !hasDate && hasDue;
   const dueIsLater = hasDue && (!hasDate || task.due > task.date);
-  const startKey = hasDate ? task.date : task.due;
+  const startFromToday =
+    dueOnly &&
+    typeof todayKey === 'string' &&
+    Boolean(parseDateKey(todayKey)) &&
+    task.due >= todayKey;
+  const startKey = hasDate ? task.date : startFromToday ? todayKey : task.due;
   const endKey = dueIsLater ? task.due : hasDate ? task.date : task.due;
 
   const startOffset = dayOffset(startKey, weekStartKey);
@@ -106,11 +120,13 @@ export function taskChartBar(task, weekStartKey) {
   if (endDay < startDay) return null;
 
   const openDate =
-    startOffset >= 0 && startOffset < WEEK_DAYS
-      ? startKey
-      : endOffset >= 0 && endOffset < WEEK_DAYS
-        ? endKey
-        : weekStartKey;
+    dueOnly
+      ? task.due
+      : startOffset >= 0 && startOffset < WEEK_DAYS
+        ? startKey
+        : endOffset >= 0 && endOffset < WEEK_DAYS
+          ? endKey
+          : weekStartKey;
 
   let label;
   if (!hasDate) {
@@ -204,7 +220,7 @@ export function buildWeekChart({ anchor, tasks = [], events = [], today = new Da
 
   const rows = [];
   for (const task of Array.isArray(tasks) ? tasks : []) {
-    const bar = taskChartBar(task, weekStartKey);
+    const bar = taskChartBar(task, weekStartKey, todayKey);
     if (!bar) continue;
     const status = TASK_STATUS_LABELS[task.status] ? task.status : 'todo';
     rows.push({
