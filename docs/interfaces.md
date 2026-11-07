@@ -111,7 +111,7 @@ interface DailyTask {
 - `start < end`；日视图时间表裁切到 07:00–21:00，周图方块按天定位、不按小时裁切，月视图仍按日期展示。
 - 标题、便签、备注按纯文本处理；不要传 HTML，渲染层会转义。
 - 月 / 周 / 日视图读取同一份清单任务与事件；日视图还读取当天便签与每日任务定义。
-- 周图一个任务一行：定时任务占开始当天，带 `due` 时从 `date` 跨到截止日；仅截止任务占截止当天；方块内显示准确时间或截止日。
+- 周图一个任务一行（定时日程也各占一行）：定时任务占开始当天，带 `due` 时从 `date` 跨到截止日；仅截止任务占截止当天；方块内显示准确时间或截止日。
 - 月视图在任务 `date` 当天显示任务 chip；`due` 与 `date` 不同时在截止日额外显示「截止」chip。
 - 任务状态切换顺序固定：`todo → partial → done → todo`；完成进度只统计 `done / total`。
 - 清单任务标题 1–80 个字符，便签文本 1–200 个字符；首尾空白会被去掉。
@@ -476,7 +476,9 @@ window.schedule.tasks.add({
   duration: 60,
   due: '2026-11-09',
 });
+window.schedule.tasks.get('task-20261108-1');
 window.schedule.tasks.list();
+window.schedule.tasks.subscribe(() => {});
 window.schedule.tasks.setStatus('task-20261108-1', 'partial');
 window.schedule.tasks.cycleStatus('task-20261108-1');
 window.schedule.tasks.update('task-20261108-1', { due: '' });

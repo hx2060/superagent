@@ -119,6 +119,8 @@ window.schedule.dailyTasks.getStatus('daily-water', '2026-11-08');
 
 `list` / `getStatus` / `toggle` / `setStatus` 的日期参数缺省为今天；格式必须是 `YYYY-MM-DD`。
 
+重复执行同一添加前，先用 `window.schedule.tasks.get(id)` 检查，或用 `update(id, ...)` 更新；`add` 的重复 id 会抛错。
+
 ### 3.3 错误约定
 
 运行时方法在非法输入时同步抛出带 `code` 的 `Error`：
