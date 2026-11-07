@@ -1,2 +1,15 @@
 node_modules/
 .DS_Store
+
+# 机制层仓库不保存图像内容：PR / 仓库只提交机制与文字说明，
+# 截图与视觉证据只保留在本地（见 docs/mechanism-handoff.md）。
+docs/screenshots/
+*.png
+*.jpg
+*.jpeg
+*.webp
+*.gif
+
+# 本地内容：具体时间 / 任务 / 便签安排只在本机保留，不提交 GitHub。
+# 应用运行时从 local/schedule.json 读取；文件缺失时保持空白日历。
+local/

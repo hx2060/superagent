@@ -1,0 +1,466 @@
+/* Week chart: task rows × 7-day time track. Scoped to .mod-week-chart-*. */
+
+.mod-week-chart-root {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+.mod-week-chart {
+  --mod-week-chart-label-width: 232px;
+  position: relative;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  background: var(--surface);
+  overscroll-behavior: contain;
+}
+
+/* -------------------------------------------------------------- header */
+.mod-week-chart-head {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  display: grid;
+  flex: none;
+  grid-template-columns: var(--mod-week-chart-label-width) minmax(0, 1fr);
+  min-width: 820px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.mod-week-chart-corner {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 5px;
+  min-width: 0;
+  padding: 10px 14px;
+  border-right: 1px solid var(--line);
+}
+
+.mod-week-chart-corner-title {
+  color: var(--text-2);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.mod-week-chart-progress {
+  color: var(--muted);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.mod-week-chart-progress-track {
+  display: block;
+  width: 100%;
+  max-width: 132px;
+  height: 4px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #eef1f6;
+}
+
+.mod-week-chart-progress-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: #0f9b8e;
+  transition: width 0.18s ease;
+}
+
+.mod-week-chart-days {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+
+.mod-week-chart-day {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-width: 0;
+  padding: 8px 2px;
+  border: 0;
+  border-left: 1px solid var(--line-soft);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  transition: background 0.14s ease;
+}
+
+.mod-week-chart-day:hover {
+  background: #f8f9fc;
+}
+
+.mod-week-chart-day-name {
+  color: var(--muted);
+  font-size: 10.5px;
+  font-weight: 500;
+}
+
+.mod-week-chart-day-num {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.mod-week-chart-day.is-today .mod-week-chart-day-name {
+  color: var(--accent-strong);
+  font-weight: 600;
+}
+
+.mod-week-chart-day.is-today .mod-week-chart-day-num {
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 600;
+  box-shadow: 0 2px 6px rgba(51, 112, 255, 0.3);
+}
+
+/* ---------------------------------------------------------------- rows */
+.mod-week-chart-body {
+  display: flex;
+  flex-direction: column;
+  min-width: 820px;
+}
+
+.mod-week-chart-row {
+  display: grid;
+  grid-template-columns: var(--mod-week-chart-label-width) minmax(0, 1fr);
+  min-height: 50px;
+  border-bottom: 1px solid var(--line-soft);
+  transition: background 0.14s ease;
+}
+
+.mod-week-chart-row:hover {
+  background: #fbfcff;
+}
+
+.mod-week-chart-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 7px 12px;
+  border-right: 1px solid var(--line-soft);
+}
+
+.mod-week-chart-label-copy {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.mod-week-chart-toggle {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 1.5px solid #c9d0da;
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--muted);
+  cursor: pointer;
+  transition: border-color 0.14s ease, background 0.14s ease, color 0.14s ease;
+}
+
+.mod-week-chart-toggle:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.mod-week-chart-toggle[data-status="partial"] {
+  border-color: #f0a63a;
+  background: #fff4e5;
+  color: #b25f00;
+}
+
+.mod-week-chart-toggle[data-status="done"] {
+  border-color: #0f9b8e;
+  background: #0f9b8e;
+  color: #fff;
+}
+
+.mod-week-chart-event-dot {
+  flex: none;
+  width: 9px;
+  height: 9px;
+  margin: 0 4px;
+  border-radius: 50%;
+  background: var(--week-dot, #3370ff);
+}
+
+.mod-week-chart-title {
+  display: block;
+  min-width: 0;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 500;
+  line-height: 1.35;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.mod-week-chart-title:hover {
+  color: var(--accent-strong);
+}
+
+.mod-week-chart-title.is-done {
+  color: var(--muted);
+  text-decoration: line-through;
+}
+
+.mod-week-chart-meta {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 10.5px;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mod-week-chart-row.is-overdue .mod-week-chart-meta {
+  color: var(--danger);
+}
+
+/* --------------------------------------------------------------- track */
+.mod-week-chart-track {
+  position: relative;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.mod-week-chart-grid {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+
+.mod-week-chart-grid-day {
+  position: relative;
+  border-left: 1px solid var(--line-soft);
+}
+
+.mod-week-chart-grid-day.is-first {
+  border-left: 0;
+}
+
+.mod-week-chart-grid-day.is-today {
+  background-color: #fbfcff;
+}
+
+.mod-week-chart-bar {
+  position: absolute;
+  top: 50%;
+  left: calc(var(--bar-left) * 100%);
+  display: flex;
+  align-items: center;
+  width: calc(var(--bar-width) * 100%);
+  min-width: 16px;
+  height: 28px;
+  padding: 0 7px;
+  overflow: hidden;
+  border: 0;
+  border-left: 3px solid var(--bar-color, #3370ff);
+  border-radius: 6px;
+  background: var(--bar-bg, #eaf1ff);
+  color: var(--bar-text, #245bdb);
+  font: inherit;
+  font-size: 10.5px;
+  font-weight: 500;
+  line-height: 1;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+  transform: translateY(-50%);
+  box-shadow: 0 1px 1px rgba(31, 35, 41, 0.05);
+  transition: filter 0.14s ease, box-shadow 0.14s ease;
+}
+
+.mod-week-chart-bar:hover {
+  filter: brightness(0.97);
+  box-shadow: 0 2px 6px rgba(31, 35, 41, 0.1);
+}
+
+.mod-week-chart-bar-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Event colors come first; task status colors below take precedence. */
+.mod-week-chart-bar.color-blue {
+  --bar-color: #3370ff;
+  --bar-bg: #eaf1ff;
+  --bar-text: #245bdb;
+}
+
+.mod-week-chart-bar.color-teal {
+  --bar-color: #0f9b8e;
+  --bar-bg: #e3f7f3;
+  --bar-text: #0a7469;
+}
+
+.mod-week-chart-bar.color-orange {
+  --bar-color: #e07800;
+  --bar-bg: #fff1e0;
+  --bar-text: #b25f00;
+}
+
+.mod-week-chart-bar.color-violet {
+  --bar-color: #7b5cf0;
+  --bar-bg: #efeaff;
+  --bar-text: #5238c9;
+}
+
+.mod-week-chart-bar.is-todo {
+  --bar-color: #3370ff;
+  --bar-bg: #eaf1ff;
+  --bar-text: #245bdb;
+}
+
+.mod-week-chart-bar.is-partial {
+  --bar-color: #e07800;
+  --bar-bg: #fff1e0;
+  --bar-text: #b25f00;
+}
+
+.mod-week-chart-bar.is-done {
+  --bar-color: #0f9b8e;
+  --bar-bg: #e3f7f3;
+  --bar-text: #0a7469;
+  opacity: 0.82;
+}
+
+.mod-week-chart-bar.is-done .mod-week-chart-bar-label {
+  text-decoration: line-through;
+}
+
+.mod-week-chart-bar.is-overdue {
+  --bar-color: #f54a45;
+  --bar-bg: #fff0ef;
+  --bar-text: #c9342f;
+}
+
+.mod-week-chart-bar.is-clipped-start {
+  border-radius: 0 6px 6px 0;
+}
+
+.mod-week-chart-bar.is-clipped-end {
+  border-radius: 6px 0 0 6px;
+}
+
+.mod-week-chart-bar.is-clipped-start.is-clipped-end {
+  border-radius: 0;
+}
+
+/* --------------------------------------------------------------- empty */
+.mod-week-chart-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 260px;
+  padding: 32px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.mod-week-chart-empty strong {
+  color: var(--text-2);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.mod-week-chart-empty span {
+  max-width: 420px;
+  font-size: 11.5px;
+  line-height: 1.6;
+}
+
+.mod-week-chart-live {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ---------------------------------------------------------- responsive */
+@media (max-width: 900px) {
+  .mod-week-chart {
+    --mod-week-chart-label-width: 188px;
+  }
+
+  .mod-week-chart-head,
+  .mod-week-chart-body {
+    min-width: 760px;
+  }
+
+  .mod-week-chart-corner {
+    padding: 9px 10px;
+  }
+
+  .mod-week-chart-label {
+    padding: 7px 9px;
+  }
+}
+
+@media (max-width: 640px) {
+  .mod-week-chart {
+    --mod-week-chart-label-width: 156px;
+  }
+
+  .mod-week-chart-head,
+  .mod-week-chart-body {
+    min-width: 680px;
+  }
+
+  .mod-week-chart-day-name {
+    font-size: 9.5px;
+  }
+
+  .mod-week-chart-day-num {
+    font-size: 12px;
+  }
+
+  .mod-week-chart-title {
+    font-size: 11.5px;
+  }
+
+  .mod-week-chart-meta {
+    font-size: 9.5px;
+  }
+
+  .mod-week-chart-bar {
+    height: 25px;
+  }
+}

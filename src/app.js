@@ -1,7 +1,6 @@
 import {
   WEEKDAY_LABELS,
   WEEK_GRID_END_HOUR,
-  WEEK_GRID_HOUR_HEIGHT,
   WEEK_GRID_START_HOUR,
   addDays,
   addMonths,
@@ -20,25 +19,45 @@ import {
   startOfDay,
   timeToMinutes,
   toDateKey,
-  weekEventStyle,
 } from './calendar.js';
-import { sampleDailyTasks, sampleEvents, sampleNotes, sampleTasks } from './data.js';
+import {
+  loadLocalData,
+  pickSeedData,
+  sampleDailyTasks,
+  sampleEvents,
+  sampleNotes,
+  sampleTasks,
+} from './data.js';
+import { taskMonthAnchors } from './tasks.js';
 import { createDailyTaskStore, mount as mountDailyTasks } from './modules/daily-tasks/index.js';
 import { createInboxStore, mount as mountInbox } from './modules/inbox/index.js';
+import { mount as mountWeekChart } from './modules/week-chart/index.js';
 
 const VIEWS = new Set(['month', 'week', 'day']);
-const WEEK_GRID_HEIGHT = (WEEK_GRID_END_HOUR - WEEK_GRID_START_HOUR) * WEEK_GRID_HOUR_HEIGHT;
 const today = startOfDay(new Date());
+const TASK_STATUS_COLORS = { todo: 'blue', partial: 'orange', done: 'teal' };
 
 const state = {
   view: 'month',
   anchor: today,
 };
 
-const inbox = createInboxStore({ tasks: sampleTasks, notes: sampleNotes });
-const dailyTasks = createDailyTaskStore(sampleDailyTasks);
+// Concrete schedules live in the git-ignored local/schedule.json; the committed
+// arrays in src/data.js stay blank. A missing/broken local file starts blank.
+const localData = await loadLocalData();
+const seed = pickSeedData(localData, {
+  events: sampleEvents,
+  notes: sampleNotes,
+  tasks: sampleTasks,
+  dailyTasks: sampleDailyTasks,
+});
+const events = seed.events;
+
+const inbox = createInboxStore({ tasks: seed.tasks, notes: seed.notes });
+const dailyTasks = createDailyTaskStore(seed.dailyTasks);
 let inboxView = null;
 let dailyTasksView = null;
+let weekChartView = null;
 
 const EVENT_DOT_COLORS = {
   blue: '#3370ff',
@@ -102,9 +121,40 @@ const dailyTasksApi = Object.freeze({
   },
 });
 
-// Public "dsh" input interface; the calendar's manual input is the day-view
-// module's add form. Documented in docs/interfaces.md.
-window.schedule = Object.freeze({ dailyTasks: dailyTasksApi });
+// Public "dsh" input interface. Tasks are the canonical way to add scheduled
+// work; see docs/schedule-api.md. The manual input remains the day-view form.
+const tasksApi = Object.freeze({
+  add(input) {
+    return inbox.addTask(input);
+  },
+  update(id, changes) {
+    return inbox.updateTask(id, changes);
+  },
+  remove(id) {
+    return inbox.deleteTask(id);
+  },
+  get(id) {
+    return inbox.listTasks().find((task) => task.id === id) ?? null;
+  },
+  list() {
+    return inbox.listTasks();
+  },
+  setStatus(id, status) {
+    return inbox.setTaskStatus(id, status);
+  },
+  cycleStatus(id) {
+    return inbox.cycleTaskStatus(id);
+  },
+  subscribe(listener) {
+    return inbox.subscribe(listener);
+  },
+});
+
+window.schedule = Object.freeze({
+  version: '0.5',
+  tasks: tasksApi,
+  dailyTasks: dailyTasksApi,
+});
 
 function periodLabel() {
   if (state.view === 'month') return formatMonthTitle(state.anchor);
@@ -116,10 +166,50 @@ function eventChip(event) {
   return `<span class="chip chip--${event.color}"><span class="chip-title">${escapeHtml(event.title)}</span></span>`;
 }
 
+function taskChip(task, due) {
+  const color = TASK_STATUS_COLORS[task.status] ?? 'blue';
+  const classes = ['chip', `chip--${color}`, 'chip--task'];
+  if (due) classes.push('chip--due');
+  if (task.status === 'done') classes.push('is-done');
+  const prefix = due ? '截止 ' : '';
+  const time = !due && task.start ? `${task.start} · ` : '';
+  return `<span class="${classes.join(' ')}"><span class="chip-title">${prefix}${time}${escapeHtml(task.title)}</span></span>`;
+}
+
+/**
+ * Month cells and the day strip show one unified agenda: timed events, tasks
+ * bound to a date, and tasks whose deadline falls on that date. This is the
+ * mechanism that keeps the checklist, week chart and month grid in sync.
+ */
+function monthItems() {
+  const map = new Map();
+  const add = (key, sort, html) => {
+    if (!map.has(key)) map.set(key, []);
+    map.get(key).push({ sort, html });
+  };
+
+  for (const event of events) {
+    add(event.date, timeToMinutes(event.start), eventChip(event));
+  }
+  const todayKey = toDateKey(today);
+  for (const task of inbox.listTasks()) {
+    for (const anchor of taskMonthAnchors(task, todayKey)) {
+      const sort = anchor.due
+        ? 24 * 60
+        : task.start && task.date === anchor.key
+          ? timeToMinutes(task.start)
+          : 0;
+      add(anchor.key, sort, taskChip(task, anchor.due));
+    }
+  }
+  for (const items of map.values()) items.sort((a, b) => a.sort - b.sort);
+  return map;
+}
+
 function renderMonth() {
   const monthDays = buildMonthMatrix(state.anchor);
   const month = state.anchor.getMonth();
-  const grouped = groupEventsByDate(sampleEvents);
+  const itemsByDate = monthItems();
 
   const weekdayRow = WEEKDAY_LABELS.map(
     (label) => `<div class="month-weekday">周${label}</div>`
@@ -128,16 +218,16 @@ function renderMonth() {
   const cells = monthDays
     .map((date) => {
       const key = toDateKey(date);
-      const dayEvents = grouped.get(key) ?? [];
+      const items = itemsByDate.get(key) ?? [];
       const inMonth = date.getMonth() === month;
       const classes = ['month-cell'];
       if (!inMonth) classes.push('is-outside');
       if (isSameDay(date, today)) classes.push('is-today');
 
-      const visibleChips = dayEvents.slice(0, 2).map(eventChip).join('');
-      const hiddenCount = dayEvents.length - 2;
+      const visibleChips = items.slice(0, 2).map((item) => item.html).join('');
+      const hiddenCount = items.length - 2;
       const more = hiddenCount > 0 ? `<span class="month-more">+${hiddenCount} 项</span>` : '';
-      const countLabel = dayEvents.length === 0 ? '无日程' : `${dayEvents.length} 项日程`;
+      const countLabel = items.length === 0 ? '无安排' : `${items.length} 项安排`;
 
       return `<button
         type="button"
@@ -158,85 +248,9 @@ function renderMonth() {
   </div>`;
 }
 
-function renderWeekEvent(event, layout, geometry) {
-  const compact = geometry.height < 42;
-  const left = (layout.column / layout.columns) * 100;
-  const width = 100 / layout.columns;
-  return `<div
-    class="week-event event--${event.color}${compact ? ' is-compact' : ''}"
-    style="top:${geometry.top + 1}px;height:${Math.max(geometry.height - 2, 16)}px;left:calc(${left}% + 3px);width:calc(${width}% - 6px)"
-    title="${escapeHtml(event.title)} · ${formatTimeRange(event.start, event.end)}"
-  >
-    <span class="week-event-title">${escapeHtml(event.title)}</span>
-    <span class="week-event-time">${formatTimeRange(event.start, event.end)}</span>
-  </div>`;
-}
-
 function renderWeek() {
-  const days = getWeekDays(state.anchor);
-  const grouped = groupEventsByDate(sampleEvents);
-
-  const header = days
-    .map((date) => {
-      const isToday = isSameDay(date, today);
-      return `<button
-        type="button"
-        class="week-day${isToday ? ' is-today' : ''}"
-        data-open-date="${toDateKey(date)}"
-        aria-label="查看${date.getMonth() + 1}月${date.getDate()}日（周${WEEKDAY_LABELS[(date.getDay() + 6) % 7]}）的日视图"
-        ${isToday ? 'aria-current="date"' : ''}
-      >
-        <span class="week-day-name">周${WEEKDAY_LABELS[(date.getDay() + 6) % 7]}</span>
-        <span class="week-day-num">${date.getDate()}</span>
-      </button>`;
-    })
-    .join('');
-
-  const axisLabels = Array.from(
-    { length: WEEK_GRID_END_HOUR - WEEK_GRID_START_HOUR },
-    (_, index) => {
-      const hour = WEEK_GRID_START_HOUR + index;
-      return `<span class="axis-label" style="top:${index * WEEK_GRID_HOUR_HEIGHT}px">${String(hour).padStart(2, '0')}:00</span>`;
-    }
-  ).join('');
-
-  const columns = days
-    .map((date) => {
-      const dayEvents = grouped.get(toDateKey(date)) ?? [];
-      const layouts = layoutOverlaps(dayEvents);
-      const blocks = dayEvents
-        .map((event) => {
-          const geometry = weekEventStyle(event);
-          if (!geometry) return '';
-          return renderWeekEvent(event, layouts.get(event.id) ?? { column: 0, columns: 1 }, geometry);
-        })
-        .join('');
-      return `<div class="week-column${isSameDay(date, today) ? ' is-today' : ''}" data-day="${toDateKey(date)}">${blocks}</div>`;
-    })
-    .join('');
-
-  const now = new Date();
-  const todayInWeek = days.some((date) => isSameDay(date, today));
-  const nowMinutes = now.getHours() * 60 + now.getMinutes();
-  const gridStart = WEEK_GRID_START_HOUR * 60;
-  const gridEnd = WEEK_GRID_END_HOUR * 60;
-  const nowLine =
-    todayInWeek && nowMinutes >= gridStart && nowMinutes <= gridEnd
-      ? `<div class="week-now" style="top:${((nowMinutes - gridStart) / 60) * WEEK_GRID_HOUR_HEIGHT}px" aria-hidden="true"><span class="week-now-dot"></span></div>`
-      : '';
-
   return `<div class="week-view">
-    <div class="week-head">
-      <div class="week-head-axis" aria-hidden="true"></div>
-      ${header}
-    </div>
-    <div class="week-scroll">
-      <div class="week-body" style="height:${WEEK_GRID_HEIGHT}px;--hour-height:${WEEK_GRID_HOUR_HEIGHT}px">
-        <div class="week-axis" aria-hidden="true">${axisLabels}</div>
-        <div class="week-columns">${columns}</div>
-        ${nowLine}
-      </div>
-    </div>
+    <div class="mod-week-chart-root" data-module-root="week-chart"></div>
   </div>`;
 }
 
@@ -259,7 +273,7 @@ function eventIcon(name) {
 
 function renderDayWeekStrip() {
   const days = getWeekDays(state.anchor);
-  const grouped = groupEventsByDate(sampleEvents);
+  const grouped = groupEventsByDate(events);
 
   const weekRange = formatWeekTitle(state.anchor).replace(/^\d{4}年/, '');
 
@@ -269,18 +283,18 @@ function renderDayWeekStrip() {
     ${days
       .map((date) => {
         const key = toDateKey(date);
-        const events = grouped.get(key) ?? [];
+        const items = [...(grouped.get(key) ?? []), ...inbox.listCalendarEvents(key)];
         const selected = isSameDay(date, state.anchor);
         const isToday = isSameDay(date, today);
-        const dots = events
+        const dots = items
           .slice(0, 4)
-          .map((event) => `<span class="day-strip-dot" style="background:${EVENT_DOT_COLORS[event.color] ?? '#3370ff'}"></span>`)
+          .map((item) => `<span class="day-strip-dot" style="background:${EVENT_DOT_COLORS[item.color] ?? '#3370ff'}"></span>`)
           .join('');
         return `<button
           type="button"
           class="day-strip-day${selected ? ' is-selected' : ''}${isToday ? ' is-today' : ''}"
           data-open-date="${key}"
-          aria-label="${date.getMonth() + 1}月${date.getDate()}日，${events.length} 项日程，查看当日"
+          aria-label="${date.getMonth() + 1}月${date.getDate()}日，${items.length} 项安排，查看当日"
           ${selected ? 'aria-current="date"' : ''}
         >
           <span class="day-strip-name">周${WEEKDAY_LABELS[(date.getDay() + 6) % 7]}</span>
@@ -365,7 +379,7 @@ function renderDayTimeline(dayEvents) {
 function dayEventsFor(anchor) {
   const dateKey = toDateKey(anchor);
   return [
-    ...eventsForDay(sampleEvents, anchor),
+    ...eventsForDay(events, anchor),
     ...inbox.listCalendarEvents(dateKey),
   ].sort((a, b) => timeToMinutes(a.start) - timeToMinutes(b.start));
 }
@@ -380,11 +394,12 @@ function renderTimelinePanel(dayEvents) {
   </section>`;
 }
 
-function refreshDayTimeline() {
+function refreshDayView() {
   if (state.view !== 'day') return;
+  const strip = root.querySelector('.day-weekstrip');
+  if (strip) strip.outerHTML = renderDayWeekStrip();
   const panel = root.querySelector('.day-timeline-panel');
-  if (!panel) return;
-  panel.outerHTML = renderTimelinePanel(dayEventsFor(state.anchor));
+  if (panel) panel.outerHTML = renderTimelinePanel(dayEventsFor(state.anchor));
 }
 
 function renderDay() {
@@ -409,6 +424,11 @@ function render() {
     dailyTasksView = null;
   }
 
+  if (weekChartView) {
+    weekChartView.destroy();
+    weekChartView = null;
+  }
+
   periodTitle.textContent = periodLabel();
 
   for (const button of viewButtons) {
@@ -419,13 +439,19 @@ function render() {
     root.innerHTML = renderMonth();
   } else if (state.view === 'week') {
     root.innerHTML = renderWeek();
+    weekChartView = mountWeekChart({
+      root: root.querySelector('[data-module-root="week-chart"]'),
+      state: { view: state.view, anchor: new Date(state.anchor) },
+      data: { events, tasks: inbox.listTasks() },
+      services: { inbox },
+    });
   } else {
     root.innerHTML = renderDay();
     inboxView = mountInbox({
       root: root.querySelector('[data-module-root="inbox"]'),
       state: { view: state.view, anchor: new Date(state.anchor) },
       data: {
-        events: sampleEvents,
+        events,
         notes: inbox.listNotes(toDateKey(state.anchor)),
         tasks: inbox.listTasks(),
       },
@@ -435,9 +461,9 @@ function render() {
       root: root.querySelector('[data-module-root="daily-tasks"]'),
       state: { view: state.view, anchor: new Date(state.anchor) },
       data: {
-        events: sampleEvents,
-        notes: sampleNotes,
-        tasks: sampleTasks,
+        events,
+        notes: inbox.listNotes(toDateKey(state.anchor)),
+        tasks: inbox.listTasks(),
         dailyTasks: dailyTasks.listTasks(),
       },
       services: { dailyTasks },
@@ -445,9 +471,13 @@ function render() {
   }
 }
 
-// Scheduled tasks are mirrored into the day timeline. Keep the timeline in
-// sync without remounting the editable sidebar / losing focus.
-inbox.subscribe(refreshDayTimeline);
+// Keep the visible view in sync with the shared stores. Day view only refreshes
+// the timeline panel (the inbox module owns its own panel); month re-renders in
+// place; week chart subscribes inside its module.
+inbox.subscribe(() => {
+  if (state.view === 'month') render();
+  else if (state.view === 'day') refreshDayView();
+});
 
 function setView(view) {
   if (!VIEWS.has(view) || view === state.view) return;
