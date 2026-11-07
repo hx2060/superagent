@@ -66,8 +66,8 @@ mount(context) -> {
 ## 两个添加入口
 
 1. **dsh 下发**
-   - 持久方式：在 `src/data.js` 的 `sampleDailyTasks` 中追加定义，刷新后加载；随仓库版本管理。
-   - 运行时方式：`window.schedule.dailyTasks.add({ title, icon? })`。完整 API 与示例见 `docs/interfaces.md`。
+   - 持久方式：在本地内容文件 `local/schedule.json` 的 `dailyTasks` 中追加定义（不提交仓库），刷新后加载。
+   - 运行时方式：`window.schedule.dailyTasks.add({ title, icon? })`。完整 API 与示例见 `docs/schedule-api.md`。
 2. **日历内手工添加**
    - 日视图顶部「每日任务」条 → `＋ 添加` → 输入名称 → `加入`。
    - 只填写标题，图标使用默认 `🔁`；`Esc` 或「取消」收起表单。
@@ -78,7 +78,7 @@ mount(context) -> {
 - 完成状态按 `YYYY-MM-DD` 隔离：同一天内切换，跨天重新从 `todo` 开始；切回旧日期可看到旧记录。
 - 当天进度只统计 `done / total`，与主干任务清单口径一致。
 - 所有文本按纯文本转义；不写入 HTML、不读取凭据。
-- 手工添加与运行时 API 新增的任务仅存在当前页面会话；刷新后回到 `sampleDailyTasks` 初始定义。这是当前无后端 / 无持久化基线的限制，不是 store 契约的一部分。
+- 手工添加与运行时 API 新增的任务仅存在当前页面会话；刷新后回到 `local/schedule.json` / `sampleDailyTasks` 的初始定义。这是当前无后端 / 无持久化基线的限制，不是 store 契约的一部分。
 - 模块不修改全局 `button` 等元素样式；类名均为 `.mod-daily-tasks-*`。
 
 ## 注册点（主干改动）
@@ -94,5 +94,5 @@ mount(context) -> {
 ## 测试与验收
 
 - `npm test` 覆盖 store 的校验、按日隔离、三态循环、进度、订阅与错误码。
-- 浏览器验证：1440 / 1024 / 768 / 390 无横向溢出；三视图切换、日期导航、手工添加、空输入错误、`Esc`、dsh API、跨日重置、刷新后会话数据回退均已检查。
-- Before / After 截图见 `docs/screenshots/daily-tasks-*.png`。
+- 浏览器验证：1440 / 1024 / 768 / 390 无页面横向溢出；三视图切换、日期导航、手工添加、空输入错误、`Esc`、dsh API、跨日重置、刷新后会话数据回退均已检查。
+- Baseline / After 视觉证据只保留在本地 `local/evidence/`；仓库与 PR 不提交截图。

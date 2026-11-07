@@ -1,6 +1,6 @@
 # inbox — 清单 / 便签编辑模块
 
-日视图左侧「清单」（Inbox）与「便签」面板的新增、修改、删除；清单任务可选填写开始时间与持续分钟数，填写后会同步到该日时间表；也可带可选的截止日期（如 `2026-11-08`），在行内显示为「截止 11月8日 周日」。
+日视图左侧「清单」（Inbox）与「便签」面板的新增、修改、删除；清单任务可选填写开始时间与持续分钟数，填写后会同步到该日时间表、周图与月视图；也可带可选的截止日期（如 `2026-11-08`），在行内显示为「截止 11月8日 周日」。
 
 ## 挂载
 
@@ -32,7 +32,7 @@ mountInbox({
 | 方法 | 说明 |
 | --- | --- |
 | `listTasks()` | 返回带当前状态的任务副本，按加入顺序；定时任务同时带派生的 `end` |
-| `addTask({ title, icon?, date?, start?, duration?, due? })` | 新增任务；标题去空白、默认 `📝`、初始 `todo`；时间与截止日期可选 |
+| `addTask({ id?, title, icon?, date?, start?, duration?, due? })` | 新增任务；标题去空白、默认 `📝`、初始 `todo`；`id` 可显式指定（须唯一），时间与截止日期可选 |
 | `updateTask(id, { title?, icon?, date?, start?, duration?, due? })` | 修改任务，保留当前状态；时间字段清空即移出时间表，`due` 传空即清除截止日期 |
 | `deleteTask(id)` | 删除任务 |
 | `taskStatus(id)` / `setTaskStatus(id, status)` / `cycleTaskStatus(id)` | 三态读取、设置、循环 |
@@ -44,7 +44,7 @@ mountInbox({
 | `deleteNote(id)` | 删除便签 |
 | `subscribe(listener)` | 变更订阅，返回取消函数 |
 
-校验失败抛出 `Error`，`error.code` 为 `INBOX_TASK_TITLE_INVALID`、`INBOX_NOTE_TEXT_INVALID`、`INBOX_NOTE_DATE_INVALID`、`INBOX_TASK_SCHEDULE_INVALID`、`INBOX_TASK_DUE_INVALID`、`INBOX_TASK_NOT_FOUND`、`INBOX_NOTE_NOT_FOUND`、`INBOX_TASK_STATUS_INVALID`。
+校验失败抛出 `Error`，`error.code` 为 `INBOX_TASK_TITLE_INVALID`、`INBOX_NOTE_TEXT_INVALID`、`INBOX_NOTE_DATE_INVALID`、`INBOX_TASK_SCHEDULE_INVALID`、`INBOX_TASK_DUE_INVALID`、`INBOX_TASK_DUPLICATE_ID`、`INBOX_TASK_NOT_FOUND`、`INBOX_NOTE_NOT_FOUND`、`INBOX_TASK_STATUS_INVALID`。
 
 约束：任务标题 1–80 字符，便签 1–200 字符；日期使用 `YYYY-MM-DD`；开始时间 `HH:mm`，范围 07:00–20:59；持续时间为 5–720 分钟整数，且结束时间不晚于 21:00。`start` 与 `duration` 必须成对出现；都不填表示只留在清单。`due` 可选，必须是真实的 `YYYY-MM-DD`；只用于展示，不影响任务日期、状态或时间表。
 
@@ -75,10 +75,10 @@ mountInbox({
 ## 不变量与限制
 
 - 只操作 `context.root`；样式前缀 `.mod-inbox-`。
-- 未填时间的任务属于全局未排期 Inbox，不绑定日期；填写开始 / 持续后绑定日期（新增时取当前日视图日期，编辑已有定时任务时保留原日期），并同步到该日时间表。
+- 未填时间的任务属于全局未排期 Inbox，不绑定日期；填写开始 / 持续后绑定日期（新增时取当前日视图日期，编辑已有定时任务时保留原日期），并同步到该日时间表、周图与月视图；只填 `due` 的任务在截止日进入周 / 月视图。
 - 便签按锚点日期展示与新增。
-- 时间表事件由主干渲染；模块通过 `services.inbox.listCalendarEvents(date)` 提供派生事件，主干的 store 订阅负责刷新时间表，不重挂侧栏。
-- 数据只在当前页面会话有效，刷新后回到 `src/data.js` 的空白初始值；持久化与后端接入见 `docs/integration.md`。
+- 时间表事件由主干渲染；模块通过 `services.inbox.listCalendarEvents(date)` 提供派生事件，主干的 store 订阅负责刷新周条与时间表，不重挂侧栏。周图模块直接订阅同一个 store。
+- 数据只在当前页面会话有效，刷新后回到 `local/schedule.json` 或 `src/data.js` 的初始值；持久化内容写入本地文件（不提交），后端接入见 `docs/integration.md`。
 - 删除为两步确认，不提供撤销。
 - 不提供修改定时任务日期的入口；日期在新增 / 首次填写时间时确定。
 - 截止日期当前通过种子数据或 store API 写入并在行内展示；新增 / 编辑表单尚未提供日期输入，UI 内不能修改或清除已有截止日期。

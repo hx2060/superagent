@@ -13,7 +13,8 @@ src/modules/<name>/
 当前已落地的模块：
 
 - `daily-tasks/`：每日重复任务。日视图通过 `[data-module-root="daily-tasks"]` 注册点挂载，共享状态走 `services.dailyTasks`；样式在 `index.html` 中以单独 `<link>` 加载。
-- `inbox/`：日视图「清单」与「便签」的新增 / 修改 / 删除；清单任务可选开始时间与持续分钟，并同步到日视图时间表；也可带可选截止日期并在行内展示。注册点为 `<aside class="day-sidebar" data-module-root="inbox">`，共享状态走 `services.inbox`，模块样式在 `index.html` 中以单独 `<link>` 加载。
+- `inbox/`：日视图「清单」与「便签」的新增 / 修改 / 删除；清单任务可选开始时间与持续分钟，并同步到日视图时间表、周图与月视图；也可带可选截止日期并在行内展示。注册点为 `<aside class="day-sidebar" data-module-root="inbox">`，共享状态走 `services.inbox`，模块样式在 `index.html` 中以单独 `<link>` 加载。
+- `week-chart/`：周视图任务 × 时间方块图。注册点为 `<div class="mod-week-chart-root" data-module-root="week-chart">`，通过 `services.inbox` 读取同一份任务并切换状态；几何与行模型在 `chart.js`。
 
 ## 模块入口模板
 
@@ -45,8 +46,8 @@ export function mount({ root, state, data, services }) {
 
 模块 PR 提交最小注册点 / `services` 接口提案：
 
-- 主干在日视图渲染函数中保留模块根节点：每日任务为 `<div data-module-root="daily-tasks"></div>`，清单 / 便签为 `<aside class="day-sidebar" data-module-root="inbox">`。
-- 主干在日视图渲染后 `mount` 模块；切换视图时先调用模块返回的 `destroy()`。
+- 主干在对应视图渲染函数中保留模块根节点：每日任务为 `<div data-module-root="daily-tasks"></div>`，清单 / 便签为 `<aside class="day-sidebar" data-module-root="inbox">`，周图为 `<div class="mod-week-chart-root" data-module-root="week-chart"></div>`。
+- 主干在视图渲染后 `mount` 模块；切换视图时先调用模块返回的 `destroy()`。
 - 模块样式由 `index.html` 中一行 `<link rel="stylesheet">` 加载，模块 CSS 使用 `.mod-<name>-` 前缀。
 - 共享状态通过 `context.services` 传递，当前导出 `services.dailyTasks` 与 `services.inbox`。
 
@@ -56,7 +57,7 @@ export function mount({ root, state, data, services }) {
 - [ ] `mount(context)` 返回 `{ destroy }`（可选 `update`）；只读写 `root`。
 - [ ] 共享状态先提案最小 service，加入可选的 `context.services` 键；文档写清方法、错误码、同步语义。
 - [ ] 日视图槽位、mount / destroy、样式入口按现有模块模式登记；不改既有槽位。
-- [ ] store / 纯逻辑有 node:test；UI 有 1440 / 1024 / 768 / 390 证据。
+- [ ] store / 纯逻辑有 node:test；UI 在本地按 1440 / 1024 / 768 / 390 验证，证据留在 `local/evidence/`，不入仓库。
 - [ ] `docs/interfaces.md`（模块契约 / 数据 / 选择器）与 `docs/integration.md`（接入步骤）已更新。
 - [ ] 无 console error、无横向溢出；空白启动 / 空状态 / 深链回归通过。
 
