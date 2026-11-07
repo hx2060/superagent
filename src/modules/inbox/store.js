@@ -153,8 +153,37 @@ function createDefaultIdFactory() {
  * }} [options]
  */
 export function createInboxStore({ tasks = [], notes = [], idFactory } = {}) {
-  const taskItems = tasks.map((task) => ({ ...task }));
-  const noteItems = notes.map((note) => ({ ...note }));
+  const nextId = typeof idFactory === 'function' ? idFactory : createDefaultIdFactory();
+
+  // Seed data can come from the local content file, where ids are expected but a
+  // hand-written file may omit or duplicate one. Generate a temporary unique id
+  // instead of rendering rows with `undefined` ids.
+  const taskItems = [];
+  for (const candidate of Array.isArray(tasks) ? tasks : []) {
+    if (!candidate || typeof candidate !== 'object') continue;
+    const task = { ...candidate };
+    if (typeof task.id === 'string' && task.id.trim()) task.id = task.id.trim();
+    if (!task.id || taskItems.some((item) => item.id === task.id)) {
+      do {
+        task.id = nextId('task');
+      } while (taskItems.some((item) => item.id === task.id));
+    }
+    taskItems.push(task);
+  }
+
+  const noteItems = [];
+  for (const candidate of Array.isArray(notes) ? notes : []) {
+    if (!candidate || typeof candidate !== 'object') continue;
+    const note = { ...candidate };
+    if (typeof note.id === 'string' && note.id.trim()) note.id = note.id.trim();
+    if (!note.id || noteItems.some((item) => item.id === note.id)) {
+      do {
+        note.id = nextId('note');
+      } while (noteItems.some((item) => item.id === note.id));
+    }
+    noteItems.push(note);
+  }
+
   const statuses = new Map(
     taskItems.map((task) => [
       task.id,
@@ -162,7 +191,6 @@ export function createInboxStore({ tasks = [], notes = [], idFactory } = {}) {
     ])
   );
   const listeners = new Set();
-  const nextId = typeof idFactory === 'function' ? idFactory : createDefaultIdFactory();
 
   function notify() {
     for (const listener of [...listeners]) listener();
@@ -192,10 +220,11 @@ export function createInboxStore({ tasks = [], notes = [], idFactory } = {}) {
     return statuses.get(id) ?? 'todo';
   }
 
-  function addTask({ title, icon, date, start, duration, due } = {}) {
+  function addTask({ id, title, icon, date, start, duration, due } = {}) {
     const titleText = normalizeTaskTitle(title);
     const schedule = normalizeSchedule({ date, start, duration });
     const dueDate = normalizeTaskDue(due);
+    const requestedId = typeof id === 'string' ? id.trim() : '';
     const task = {
       id: '',
       title: titleText,
@@ -204,9 +233,16 @@ export function createInboxStore({ tasks = [], notes = [], idFactory } = {}) {
     };
     if (schedule) Object.assign(task, schedule);
     if (dueDate) task.due = dueDate;
-    do {
-      task.id = nextId('task');
-    } while (taskItems.some((item) => item.id === task.id));
+    if (requestedId) {
+      if (taskItems.some((item) => item.id === requestedId)) {
+        throw invalid('INBOX_TASK_DUPLICATE_ID', `任务 id 已存在：${requestedId}`);
+      }
+      task.id = requestedId;
+    } else {
+      do {
+        task.id = nextId('task');
+      } while (taskItems.some((item) => item.id === task.id));
+    }
     taskItems.push(task);
     statuses.set(task.id, 'todo');
     notify();

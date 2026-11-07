@@ -325,3 +325,35 @@ test('任务：状态变化会反映在时间表事件备注中，删除后事�
   store.deleteTask(task.id);
   assert.equal(store.listCalendarEvents('2026-11-06').length, 0);
 });
+
+test('任务：可指定 id，重复 id 被拒绝', () => {
+  const store = createInboxStore({ idFactory: testIds() });
+  const task = store.addTask({ id: '  task-fixed  ', title: '固定 id 任务' });
+
+  assert.equal(task.id, 'task-fixed');
+  assert.equal(store.listTasks().length, 1);
+  assert.throws(
+    () => store.addTask({ id: 'task-fixed', title: '重复 id' }),
+    (error) => error.code === 'INBOX_TASK_DUPLICATE_ID'
+  );
+  assert.equal(store.listTasks().length, 1);
+});
+
+test('种子任务 / 便签缺少 id 或 id 重复时生成唯一临时 id', () => {
+  const store = createInboxStore({
+    tasks: [
+      { title: '缺少 id 的任务' },
+      { id: 'task-dup', title: '重复 id 一' },
+      { id: 'task-dup', title: '重复 id 二' },
+    ],
+    notes: [{ date: '2026-11-06', text: '缺少 id 的便签' }],
+    idFactory: testIds(),
+  });
+
+  const ids = store.listTasks().map((task) => task.id);
+  assert.equal(new Set(ids).size, 3);
+  assert.ok(ids.every((id) => typeof id === 'string' && id.length > 0));
+  const noteIds = store.listNotes().map((note) => note.id);
+  assert.equal(noteIds.length, 1);
+  assert.ok(noteIds[0].startsWith('note-'));
+});

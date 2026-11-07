@@ -210,8 +210,8 @@ export function mount(context) {
             start: taskEditStart,
             duration: taskEditDuration,
             hint: task.date
-              ? `时间同步到 ${formatDateLabel(task.date)} 的时间表`
-              : '时间可选 · 填写后同步到当日时间表',
+              ? `时间同步到 ${formatDateLabel(task.date)} 的日 / 周 / 月视图`
+              : '时间可选 · 填写后同步到日 / 周 / 月视图',
           })}
           <div class="mod-inbox-form-actions">
             <button type="submit" class="mod-inbox-primary">保存</button>
@@ -280,7 +280,7 @@ export function mount(context) {
         taskId: null,
         start: taskAddStart,
         duration: taskAddDuration,
-        hint: '时间可选 · 填写后同步到当日时间表',
+        hint: '时间可选 · 填写后同步到日 / 周 / 月视图',
       })}
       <div class="mod-inbox-form-actions">
         <button type="submit" class="mod-inbox-primary">添加</button>
@@ -677,7 +677,7 @@ export function mount(context) {
           announcement = {
             scope: 'task',
             text: task.start
-              ? `已添加任务「${task.title}」，已同步到时间表`
+              ? `已添加任务「${task.title}」，已同步到日历`
               : `已添加任务「${task.title}」`,
           };
           focusRequest = { type: 'task-edit-button', id: task.id };
@@ -712,7 +712,7 @@ export function mount(context) {
         announcement = {
           scope: 'task',
           text: task.start
-            ? `已保存任务「${task.title}」，时间表已同步`
+            ? `已保存任务「${task.title}」，日历已同步`
             : `已保存任务「${task.title}」`,
         };
         focusRequest = { type: 'task-edit-button', id };
