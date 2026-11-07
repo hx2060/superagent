@@ -240,6 +240,9 @@ export function mount(context) {
     const next = inbox.cycleTaskStatus(id);
     liveText = `「${task.title}」已标记为${TASK_STATUS_LABELS[next] ?? next}`;
     render();
+    // Re-rendering replaces the button; keep keyboard focus on the same task.
+    const nextToggle = root.querySelector(`[data-task-toggle="${CSS.escape(id)}"]`);
+    if (nextToggle) nextToggle.focus();
   }
 
   const unsubscribe = inbox?.subscribe ? inbox.subscribe(() => render()) : null;
