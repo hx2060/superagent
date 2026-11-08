@@ -16,6 +16,10 @@ src/modules/<name>/
 - `inbox/`：日视图「清单」与「便签」的新增 / 修改 / 删除；清单任务可选开始时间与持续分钟，并同步到日视图时间表、周图与月视图；也可带可选截止日期并在行内展示。注册点为 `<aside class="day-sidebar" data-module-root="inbox">`，共享状态走 `services.inbox`，模块样式在 `index.html` 中以单独 `<link>` 加载。
 - `week-chart/`：周视图任务 × 时间方块图。注册点为 `<div class="mod-week-chart-root" data-module-root="week-chart">`，通过 `services.inbox` 读取同一份任务并切换状态；几何与行模型在 `chart.js`。
 
+## 占位 / 设计中
+
+- `attention-switch/`：多种类任务切换注意力、缓解逃避。**占位阶段**：只有 `index.js` 骨架与设计讨论 README，未注册、未实现；方向见该模块 README 的「开放问题」，需求方确认后再提接口提案。
+
 ## 模块入口模板
 
 ```js
