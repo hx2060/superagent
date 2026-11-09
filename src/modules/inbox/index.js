@@ -561,6 +561,8 @@ export function mount(context) {
     editingTaskId = null;
     editingNoteId = null;
     formError = null;
+    taskAddAllDay = false;
+    taskEditAllDay = false;
   }
 
   function handleClick(event) {

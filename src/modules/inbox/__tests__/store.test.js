@@ -385,6 +385,21 @@ test('任务：截止日期早于任务日期时写入报错', () => {
   assert.equal(same.due, '2026-11-06');
 });
 
+test('任务：被拒绝的修改不会留下半应用的改动', () => {
+  const store = createInboxStore({ idFactory: testIds() });
+  const task = store.addTask({ title: '原标题', date: '2026-11-06', start: '09:00', duration: 30 });
+
+  assert.throws(
+    () => store.updateTask(task.id, { title: '新标题', due: '2026-11-05' }),
+    (error) => error.code === 'INBOX_TASK_DUE_INVALID'
+  );
+  const after = store.listTasks()[0];
+  assert.equal(after.title, '原标题');
+  assert.equal(after.date, '2026-11-06');
+  assert.equal(after.start, '09:00');
+  assert.equal(after.due, undefined);
+});
+
 test('任务：状态变化会反映在时间表事件备注中，删除后事件消失', () => {
   const store = createInboxStore({ idFactory: testIds() });
   const task = store.addTask({

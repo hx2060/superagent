@@ -312,8 +312,11 @@ export function createInboxStore({ tasks = [], notes = [], idFactory } = {}) {
 
   function updateTask(id, changes = {}) {
     const { task } = findTask(id);
-    if (changes.title !== undefined) task.title = normalizeTaskTitle(changes.title);
-    if (changes.icon !== undefined) task.icon = normalizeTaskIcon(changes.icon);
+
+    // Compute everything before mutating, so a rejected change leaves the
+    // stored task untouched (no half-applied title / schedule).
+    const nextTitle = changes.title !== undefined ? normalizeTaskTitle(changes.title) : task.title;
+    const nextIcon = changes.icon !== undefined ? normalizeTaskIcon(changes.icon) : task.icon;
 
     const nextDue = Object.prototype.hasOwnProperty.call(changes, 'due')
       ? normalizeTaskDue(changes.due)
@@ -337,6 +340,8 @@ export function createInboxStore({ tasks = [], notes = [], idFactory } = {}) {
     const nextDate = hasScheduleField ? nextSchedule?.date ?? null : task.date ?? null;
     assertDueNotBeforeDate(nextDue ?? null, nextDate);
 
+    task.title = nextTitle;
+    task.icon = nextIcon;
     if (Object.prototype.hasOwnProperty.call(changes, 'due')) {
       if (nextDue) task.due = nextDue;
       else delete task.due;
