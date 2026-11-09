@@ -23,7 +23,7 @@
 
 ## 2. 项目现状查询（模块分离形式下的积木）
 
-以下为对当前仓库的实际查询结果（`main` 基线，即 PR #8 的基线）：
+以下为对当前仓库的实际查询结果（当前 `main`，接口版本 `0.6`，已含 PR #9 的当日计划 / 收集区 / 逾期回顾 / 全天任务）：
 
 **已落地模块与注册点**（`src/app.js` 中每个模块 = 1 处 import + 1 个槽位 + 1 处 mount / destroy + `index.html` 中 1 行样式 link）：
 
@@ -35,9 +35,10 @@
 
 **可用的数据与服务**：
 
-- `Task`：`{ id, title, icon, status, date?, start?, duration?, end?, due? }`；未排期为 Inbox，填写时间后同步日 / 周 / 月。
+- `Task`：`{ id, title, icon, status, date?, start?, duration?, end?, due? }`。无日期无截止 = **收集区**（未排期）；填 `date` 绑定该日并同步日 / 周 / 月；`date` 不带 `start` / `duration` 即**全天任务**（进当日计划与周 / 月，不进时间表）；`due` 不得早于 `date`。
 - `DailyTask`：`{ id, title, icon?, recurrence: 'daily' }`；状态按日隔离。
-- `services.inbox` / `services.dailyTasks`：增改删、三态循环、订阅。
+- `src/tasks.js` 共享纯函数：`taskWindow` / `taskDayEntry` / `taskReviewGroups` / `taskMonthAnchors`——「任务占据哪些天、算什么状态」的唯一口径，月 / 周 / 日三视图共用；新模块应复用，不得另写一套日期逻辑。
+- `services.inbox` / `services.dailyTasks`：增改删、三态循环、订阅；`inbox` 另提供 `listUnscheduledTasks()`（收集区）。
 - `window.schedule`：dsh 运行时输入接口（`docs/schedule-api.md`）。
 
 **扩展点规则**（`AGENTS.md` 第 2 节、`docs/interfaces.md` 5.1）：新模块放 `src/modules/<name>/`，遵守 `mount(context)` 契约；样式 `.mod-<name>-` 前缀；新 service 键必须可选、先提案；主干注册改动需评审。
