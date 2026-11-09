@@ -259,6 +259,82 @@
   line-height: 1.45;
 }
 
+/* day plan / collecting area sections ---------------------------------- */
+
+.mod-inbox-section + .mod-inbox-section {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--d-line);
+}
+
+.mod-inbox-section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.mod-inbox-section-title {
+  color: var(--d-ink);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.mod-inbox-section-count {
+  flex: none;
+  color: var(--d-muted);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.mod-inbox-section-hint {
+  margin: -2px 0 6px;
+  color: var(--d-muted);
+  font-size: 9.5px;
+  line-height: 1.4;
+}
+
+/* plan / review flags -------------------------------------------------- */
+
+.mod-inbox-task-flag {
+  align-self: flex-start;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 9.5px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.mod-inbox-task-flag[data-task-flag='due-today'] {
+  background: #fff1e0;
+  color: #b25f00;
+}
+
+.mod-inbox-task-flag[data-task-flag='overdue'] {
+  background: #fdecea;
+  color: #c9342f;
+}
+
+/* all-day option ------------------------------------------------------- */
+
+.mod-inbox-all-day {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #7d615a;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.mod-inbox-all-day input {
+  width: 13px;
+  height: 13px;
+  margin: 0;
+  accent-color: var(--d-coral-deep);
+  cursor: pointer;
+}
+
 /* notes editing / adding ----------------------------------------------- */
 
 .mod-inbox-note {

@@ -1,6 +1,6 @@
 # 日程添加接口文档
 
-版本：`0.5`
+版本：`0.6`
 配套文档：`docs/interfaces.md`（稳定契约）、`docs/integration.md`（对接）、`docs/mechanism-handoff.md`（机制层 / 本地内容边界）
 
 本文档面向**机器人 / 自动化**：说明如何把一条日程添加进「日程」，以及添加后如何出现在清单、日视图、周图和月视图。具体任务内容属于本地内容层，**不要提交到 GitHub**。
@@ -25,17 +25,19 @@ interface Task {
   title: string;              // 1–80 字符，纯文本
   icon?: string;              // emoji，缺省 📝
   status?: TaskStatus;        // 本地种子可指定；运行时 add 固定 todo
-  date?: string;              // YYYY-MM-DD；填写后进入日 / 周 / 月视图
+  date?: string;              // YYYY-MM-DD；填写后进入当日计划与周 / 月视图
   start?: string;             // HH:mm，07:00–20:59；与 duration 成对出现
   duration?: number;          // 5–720 分钟整数；与 start 成对出现
-  due?: string;               // YYYY-MM-DD，可选截止日期
+  due?: string;               // YYYY-MM-DD，可选截止日期；不得早于 date
   end?: string;               // 派生字段（start + duration），只读
 }
 ```
 
-- `date` + `start` + `duration` 表示一个定时任务：有日视图时间表事件、周图方块、月视图日期 chip。
-- 只填 `due`（没有 `date`）表示只有截止日期：月视图在截止日显示「截止」chip，周图从今天画到截止日的长块（截止日已过时显示截止当天方块）；不进入时间表。
-- 两者都不填表示未排期 Inbox：只出现在日视图清单，不落到日历日期。
+- `date` + `start` + `duration` 表示一个定时任务：有日视图时间表事件、当日计划项、周图方块、月视图日期 chip。
+- 只填 `date`（没有 `start` / `duration`）表示**全天任务**：进入当日计划与周 / 月视图，不进时间表。
+- 只填 `due`（没有 `date`）表示只有截止日期：月视图在截止日显示「截止」chip，周图从今天画到截止日的长块（截止日已过时显示截止当天方块，并进入周 / 月「逾期回顾区」）；截止日到来前每天进入当日计划；不进入时间表。
+- 两者都不填表示未排期：只出现在日视图「收集区」，不进当日计划与日进度。
+- `due` 必须是合法的 `YYYY-MM-DD` 且**不早于 `date`**，否则写入报错 `INBOX_TASK_DUE_INVALID`。
 - `due` 与 `date` 同一天时，周图方块只占当天；`due` 晚于 `date` 时，方块从 `date` 跨到 `due`。
 - 时间使用**本地时区**的 `YYYY-MM-DD` / `HH:mm`；不做 UTC 换算。
 
@@ -60,7 +62,7 @@ interface DailyTask {
 
 ## 3. 运行时 API
 
-`window.schedule` 是只读命名空间，`version` 当前为 `0.5`。
+`window.schedule` 是只读命名空间，`version` 当前为 `0.6`。
 
 ### 3.1 `window.schedule.tasks`
 
@@ -105,6 +107,19 @@ window.schedule.tasks.setStatus('task-20261108-1', 'partial');
 window.schedule.tasks.list();
 ```
 
+全天任务与收集区：
+
+```js
+// 全天任务：只传 date，不传 start / duration
+window.schedule.tasks.add({ id: 'task-allday-1', title: '示例全天任务', date: '2026-11-10' });
+// 定时任务改为全天：清空时间（保留 date）
+window.schedule.tasks.update('task-20261108-1', { start: '', duration: '' });
+// 任务放回收集区：显式清空日期
+window.schedule.tasks.update('task-20261108-1', { date: '' });
+// 截止日期不得早于任务日期，否则抛 INBOX_TASK_DUE_INVALID
+window.schedule.tasks.add({ title: '矛盾任务', date: '2026-11-06', due: '2026-11-05' }); // 抛错
+```
+
 ### 3.2 `window.schedule.dailyTasks`
 
 每日重复任务（不绑定日期，状态按天记录）：
@@ -128,8 +143,8 @@ window.schedule.dailyTasks.getStatus('daily-water', '2026-11-08');
 | `code` | 触发条件 |
 | --- | --- |
 | `INBOX_TASK_TITLE_INVALID` | 标题为空或超过 80 字符 |
-| `INBOX_TASK_SCHEDULE_INVALID` | 时间字段不成对、格式错误、开始不在 07:00–20:59、结束晚于 21:00、日期非法 |
-| `INBOX_TASK_DUE_INVALID` | 截止日期格式非法或不是真实日期 |
+| `INBOX_TASK_SCHEDULE_INVALID` | 时间字段不成对、格式错误、开始不在 07:00–20:59、结束晚于 21:00、日期非法、清空日期但保留时间 |
+| `INBOX_TASK_DUE_INVALID` | 截止日期格式非法或不是真实日期，或截止日期早于任务日期 |
 | `INBOX_TASK_DUPLICATE_ID` | 指定的 id 已存在 |
 | `INBOX_TASK_NOT_FOUND` | 更新 / 删除 / 读写状态时 id 不存在 |
 | `INBOX_TASK_STATUS_INVALID` | 状态不是 `todo / partial / done` |
@@ -206,13 +221,16 @@ window.schedule.dailyTasks.getStatus('daily-water', '2026-11-08');
 
 | 添加内容 | 日视图 | 周图 | 月视图 |
 | --- | --- | --- | --- |
-| 定时任务（`date` + `start` + `duration`） | 清单行 + 时间表事件 | 任务行 + 当天方块 | 该日 chip（含开始时间） |
-| 仅截止日期（`due`） | 清单行 + 「截止」标签 | 从今天到截止日的长块（已过时占截止当天） | 今天开始 chip + 截止日「截止」chip |
-| 定时 + 截止（`due` 晚于 `date`） | 清单行 + 时间表事件 + 截止标签 | 从 `date` 跨到 `due` 的方块 | `date` chip + `due` 截止 chip |
-| 未排期（无 `date` / `due`） | 清单行 | 不显示 | 不显示 |
+| 定时任务（`date` + `start` + `duration`） | 当日计划行 + 时间表事件 | 任务行 + 当天方块 | 该日 chip（含开始时间） |
+| 全天任务（只有 `date`） | 当日计划行（标注「全天」） | 任务行 + 当天方块（标注「全天」） | 该日 chip |
+| 仅截止日期（`due`） | 截止日到来前：当日计划行 + 「截止」标签；截止后：不再出现在日视图 | 从今天到截止日的长块（已过时占截止当天，并进逾期回顾区） | 今天开始 chip + 截止日「截止」chip；截止后进逾期回顾横幅 |
+| 定时 + 截止（`due` 晚于 `date`） | 排期日与截止日的当日计划行 + 截止标签（未完成时区间内每天出现） | 从 `date` 跨到 `due` 的方块 | `date` chip + `due` 截止 chip |
+| 未排期（无 `date` / `due`） | 「收集区」行（不计入日进度） | 不显示 | 不显示 |
 | 每日任务（`dailyTasks`） | 顶部每日任务条 | 不显示 | 不显示 |
 
-周图与月视图使用同一份 `tasks` 数据；周图的方块按开始日到截止日跨天，方块内显示准确时间 / 截止日。状态在三处共用 `todo / partial / done`，状态切换后清单、周图、月视图同步更新。
+- **当日计划** = 截止日 / 排期日是当天，或未完成且当天在任务占据区间内；**日进度**只统计当日计划成员。
+- **逾期回顾区**：截止已过且未删除的任务，在周视图图表上方与月视图网格上方按「逾期未完成 / 已完成」分组展示，保留至删除，可切换状态。
+- 周图与月视图使用同一份 `tasks` 数据；方块按开始日到截止日跨天，方块内显示准确时间 / 截止日。三视图共用 `src/tasks.js` 的 `taskWindow` / `taskDayEntry` / `taskReviewGroups` 计算「任务出现在哪些天、算什么状态」，状态切换后同步更新。
 
 ## 6. 机器人调用示例
 
@@ -240,7 +258,7 @@ $EDITOR local/schedule.json
 
 ## 7. 版本与兼容
 
-- 当前接口版本 `0.5`；`window.schedule.tasks`、任务可选 `id`、周图数据契约与本地内容文件是本版本新增。
+- 当前接口版本 `0.6`；本版本新增：全天任务（只传 `date`）、当日计划 / 收集区分区与日进度口径、周 / 月逾期回顾区、`due` 不得早于 `date` 的写入校验；`updateTask` 清空时间从「解绑日期」改为「变为全天任务」（解绑需显式 `date: ''`）。
 - 新增字段保持可选；已发布字段与方法不删除、不改语义。
 - 破坏性变更需升级版本，并同步 `docs/interfaces.md` 与 `docs/integration.md`。
 - 本文件的示例内容均为中性占位；真实任务 / 时间 / 便签不写入仓库。

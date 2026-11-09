@@ -1,16 +1,21 @@
 /**
- * Inbox module: editable day-view 清单 (task inbox) and 便签 (sticky notes).
+ * Inbox module: editable day-view 清单 (day plan) and 便签 (sticky notes).
  *
- * The module owns the two sidebar panels and renders them from
- * `services.inbox` (see store.js). Task status cycling keeps the existing
- * `[data-task-row]` / `[data-task-toggle]` / `[data-task-progress-*]` contract.
- * New editing controls use `data-inbox-*` attributes.
+ * The 清单 panel is the day's plan: it lists the tasks that belong to the
+ * viewed day (deadline day, scheduled day, or pending deadline work inside
+ * the task's window) plus a separate 收集区 section for unscheduled tasks.
+ * Membership and progress come from the shared `taskDayEntry` mapping in
+ * `src/tasks.js`, so the day view agrees with the week chart and month grid.
+ * Tasks can be timed, all-day (date only) or unscheduled; status cycling
+ * keeps the existing `[data-task-row]` / `[data-task-toggle]` /
+ * `[data-task-progress-*]` contract. New editing controls use
+ * `data-inbox-*` attributes.
  *
  * It only reads/writes inside `context.root` and never imports app internals.
  */
 
 import { formatDuration, formatTimeRange, parseDateKey, toDateKey } from '../../calendar.js';
-import { TASK_STATUS_LABELS, nextTaskStatus } from '../../tasks.js';
+import { TASK_STATUS_LABELS, nextTaskStatus, taskDayEntry, taskStatusCounts } from '../../tasks.js';
 import {
   NOTE_TEXT_MAX_LENGTH,
   NOTE_TONES,
@@ -104,12 +109,14 @@ export function mount(context) {
   let taskDraft = '';
   let taskAddStart = '';
   let taskAddDuration = '';
+  let taskAddAllDay = false;
   let addingNote = false;
   let noteDraft = '';
   let editingTaskId = null;
   let taskEditDraft = '';
   let taskEditStart = '';
   let taskEditDuration = '';
+  let taskEditAllDay = false;
   let editingNoteId = null;
   let noteEditDraft = '';
   let formError = null;
@@ -136,12 +143,26 @@ export function mount(context) {
   }
 
   function taskScheduleLabel(task) {
-    if (!task.start) return '';
+    if (!task.start) {
+      if (!task.date) return '';
+      return task.date === dateKey ? '全天' : `${formatDateLabel(task.date)} 全天`;
+    }
     const time = task.end
       ? `${formatTimeRange(task.start, task.end)} · ${formatDuration(task.duration)}`
       : task.start;
     if (!task.date || task.date === dateKey) return time;
     return `${formatDateLabel(task.date)} ${time}`;
+  }
+
+  /** Plan / review flag shown under the status label. */
+  function taskFlag(entry) {
+    if (entry.overdue) {
+      return '<span class="mod-inbox-task-flag" data-task-flag="overdue">逾期未完成</span>';
+    }
+    if (entry.dueOnDay) {
+      return '<span class="mod-inbox-task-flag" data-task-flag="due-today">今日到期</span>';
+    }
+    return '';
   }
 
   function renderTaskTimeFields({ variant, taskId, start, duration, hint }) {
@@ -189,9 +210,12 @@ export function mount(context) {
     const title = escapeHtml(task.title);
     const status = task.status;
     const label = TASK_STATUS_LABELS[status] ?? status;
+    const entry = taskDayEntry(task, dateKey, toDateKey(new Date()));
 
     if (editingTaskId === task.id) {
-      return `<li class="day-task mod-inbox-task is-editing" data-task-row="${id}" data-status="${status}">
+      const allDayLabel = task.date && task.date !== dateKey ? formatDateLabel(task.date) : '当天';
+      const allDayAttr = task.date && !task.start ? ' data-all-day="true"' : '';
+      return `<li class="day-task mod-inbox-task is-editing" data-task-row="${id}" data-status="${status}"${allDayAttr}>
         <form class="mod-inbox-task-form" data-inbox-task-form="${id}" novalidate>
           <label class="mod-inbox-sr-only" for="mod-inbox-task-edit-${id}">修改任务名称</label>
           <input
@@ -204,15 +228,26 @@ export function mount(context) {
             autocomplete="off"
             value="${escapeHtml(taskEditDraft)}"
           />
-          ${renderTaskTimeFields({
-            variant: 'edit',
-            taskId: task.id,
-            start: taskEditStart,
-            duration: taskEditDuration,
-            hint: task.date
-              ? `时间同步到 ${formatDateLabel(task.date)} 的日 / 周 / 月视图`
-              : '时间可选 · 填写后同步到日 / 周 / 月视图',
-          })}
+          <label class="mod-inbox-all-day" for="mod-inbox-task-edit-${id}-allday">
+            <input
+              id="mod-inbox-task-edit-${id}-allday"
+              type="checkbox"
+              data-inbox-task-edit-allday
+              ${taskEditAllDay ? 'checked' : ''}
+            />
+            <span>全天（不填时间，占${allDayLabel}）</span>
+          </label>
+          ${taskEditAllDay
+            ? `<p class="mod-inbox-form-hint">取消勾选并清空时间即可放回收集区</p>`
+            : renderTaskTimeFields({
+                variant: 'edit',
+                taskId: task.id,
+                start: taskEditStart,
+                duration: taskEditDuration,
+                hint: task.date
+                  ? `时间同步到 ${formatDateLabel(task.date)} 的日 / 周 / 月视图`
+                  : '时间可选 · 填写后同步到日 / 周 / 月视图',
+              })}
           <div class="mod-inbox-form-actions">
             <button type="submit" class="mod-inbox-primary">保存</button>
             <button type="button" class="mod-inbox-secondary" data-inbox-cancel>取消</button>
@@ -224,13 +259,15 @@ export function mount(context) {
 
     const confirming = pendingDelete?.kind === 'task' && pendingDelete.id === task.id;
     const dueLabel = task.due ? formatDueLabel(task.due) : '';
-    return `<li class="day-task mod-inbox-task" data-task-row="${id}" data-status="${status}" data-scheduled="${task.start ? 'true' : 'false'}">
+    const allDayAttr = task.date && !task.start ? ' data-all-day="true"' : '';
+    return `<li class="day-task mod-inbox-task" data-task-row="${id}" data-status="${status}" data-scheduled="${task.start ? 'true' : 'false'}"${allDayAttr}>
       <span class="task-emoji" aria-hidden="true">${escapeHtml(task.icon)}</span>
       <span class="task-body">
         <span class="task-title">${title}</span>
         <span class="task-status-label">${label}</span>
+        ${taskFlag(entry)}
         ${dueLabel ? `<span class="mod-inbox-task-due" data-task-due="${escapeHtml(task.due)}">${escapeHtml(dueLabel)}</span>` : ''}
-        ${task.start ? `<span class="mod-inbox-task-when">${escapeHtml(taskScheduleLabel(task))}</span>` : ''}
+        ${task.date ? `<span class="mod-inbox-task-when">${escapeHtml(taskScheduleLabel(task))}</span>` : ''}
       </span>
       <span class="mod-inbox-actions">
         <button
@@ -275,13 +312,24 @@ export function mount(context) {
         placeholder="新任务，例如：整理桌面"
         value="${escapeHtml(taskDraft)}"
       />
-      ${renderTaskTimeFields({
-        variant: 'add',
-        taskId: null,
-        start: taskAddStart,
-        duration: taskAddDuration,
-        hint: '时间可选 · 填写后同步到日 / 周 / 月视图',
-      })}
+      <label class="mod-inbox-all-day" for="mod-inbox-task-add-allday">
+        <input
+          id="mod-inbox-task-add-allday"
+          type="checkbox"
+          data-inbox-task-add-allday
+          ${taskAddAllDay ? 'checked' : ''}
+        />
+        <span>全天（不填时间，占当天）</span>
+      </label>
+      ${taskAddAllDay
+        ? `<p class="mod-inbox-form-hint">全天任务进入当日计划与周 / 月视图，不进时间表</p>`
+        : renderTaskTimeFields({
+            variant: 'add',
+            taskId: null,
+            start: taskAddStart,
+            duration: taskAddDuration,
+            hint: '时间可选 · 填写后同步到日 / 周 / 月视图；不填则放入收集区',
+          })}
       <div class="mod-inbox-form-actions">
         <button type="submit" class="mod-inbox-primary">添加</button>
         <button type="button" class="mod-inbox-secondary" data-inbox-cancel>取消</button>
@@ -290,10 +338,37 @@ export function mount(context) {
     </form>`;
   }
 
-  function renderTasksPanel(tasks, counts) {
+  function renderTaskSection(title, count, hint, tasks, emptyText, section) {
     const rows = tasks.length
       ? `<ul class="day-task-list">${tasks.map(renderTaskRow).join('')}</ul>`
-      : '<div class="day-empty">这一天还没有清单任务</div>';
+      : `<div class="day-empty">${emptyText}</div>`;
+    return `<section class="mod-inbox-section" data-inbox-section="${section}" aria-label="${title}">
+      <header class="mod-inbox-section-head">
+        <h3 class="mod-inbox-section-title">${title}</h3>
+        <span class="mod-inbox-section-count">${count} 项</span>
+      </header>
+      ${hint ? `<p class="mod-inbox-section-hint">${hint}</p>` : ''}
+      ${rows}
+    </section>`;
+  }
+
+  function renderTasksPanel(planTasks, collectTasks, counts) {
+    const plan = renderTaskSection(
+      '当日计划',
+      planTasks.length,
+      '',
+      planTasks,
+      '这一天没有计划任务',
+      'plan'
+    );
+    const collect = renderTaskSection(
+      '收集区',
+      collectTasks.length,
+      '没有确切时间的任务，随时可以完成',
+      collectTasks,
+      '收集区是空的',
+      'collect'
+    );
     return `<section class="day-panel day-tasks-panel mod-inbox-panel mod-inbox-tasks" aria-labelledby="mod-inbox-tasks-title">
       <header class="day-panel-head">
         <h2 class="day-panel-title" id="mod-inbox-tasks-title"><span class="day-dot day-dot--green" aria-hidden="true"></span>清单</h2>
@@ -311,7 +386,8 @@ export function mount(context) {
           title="${addingTask ? '收起' : '添加清单任务'}"
         >${plusIcon()}</button>
       </header>
-      ${rows}
+      ${plan}
+      ${collect}
       ${addingTask ? renderTaskAddForm() : ''}
       <p class="day-task-hint">点圆点切换状态 · 点铅笔修改 · 删除需再次确认</p>
       <p class="mod-inbox-sr-only" aria-live="polite" data-task-live></p>
@@ -416,10 +492,14 @@ export function mount(context) {
     switch (request.type) {
       case 'task-add':
         return '[data-inbox-add-task]';
+      case 'task-add-allday':
+        return '[data-inbox-task-add-allday]';
       case 'task-add-input':
         return '[data-inbox-task-add-input]';
       case 'task-edit-input':
         return '[data-inbox-task-edit-input]';
+      case 'task-edit-allday':
+        return '[data-inbox-task-edit-allday]';
       case 'task-edit-button':
         return `[data-inbox-edit-task="${CSS.escape(request.id)}"]`;
       case 'task-delete-button':
@@ -465,8 +545,12 @@ export function mount(context) {
   function render() {
     const tasks = inbox.listTasks();
     const notes = inbox.listNotes(dateKey);
-    const counts = inbox.taskProgress();
-    root.innerHTML = `${renderTasksPanel(tasks, counts)}${renderNotesPanel(notes)}`;
+    const todayKey = toDateKey(new Date());
+    const planTasks = tasks.filter((task) => taskDayEntry(task, dateKey, todayKey).inPlan);
+    const collectTasks = inbox.listUnscheduledTasks();
+    // 日进度只统计当日计划（当日需要完成 + 未来截止未完成），不计收集区。
+    const counts = taskStatusCounts(planTasks, new Map());
+    root.innerHTML = `${renderTasksPanel(planTasks, collectTasks, counts)}${renderNotesPanel(notes)}`;
     restoreFocus();
     flushAnnouncement();
   }
@@ -477,6 +561,8 @@ export function mount(context) {
     editingTaskId = null;
     editingNoteId = null;
     formError = null;
+    taskAddAllDay = false;
+    taskEditAllDay = false;
   }
 
   function handleClick(event) {
@@ -491,6 +577,7 @@ export function mount(context) {
       taskDraft = '';
       taskAddStart = '';
       taskAddDuration = '';
+      taskAddAllDay = false;
       if (wasAdding) {
         addingTask = false;
         focusRequest = { type: 'task-add' };
@@ -530,12 +617,14 @@ export function mount(context) {
           taskDraft = '';
           taskAddStart = '';
           taskAddDuration = '';
+          taskAddAllDay = false;
           focusRequest = { type: 'task-add' };
         } else {
           editingTaskId = null;
           taskEditDraft = '';
           taskEditStart = '';
           taskEditDuration = '';
+          taskEditAllDay = false;
           focusRequest = { type: 'task-edit-button', id };
         }
         render();
@@ -570,6 +659,7 @@ export function mount(context) {
       taskEditDraft = task.title;
       taskEditStart = task.start ?? '';
       taskEditDuration = task.duration ? String(task.duration) : '';
+      taskEditAllDay = Boolean(task.date) && !task.start;
       focusRequest = { type: 'task-edit-input' };
       render();
       return;
@@ -663,22 +753,26 @@ export function mount(context) {
         taskAddStart = startInput?.value ?? taskAddStart;
         taskAddDuration = durationInput?.value ?? taskAddDuration;
         try {
-          const task = inbox.addTask({
-            title: taskDraft,
-            date: dateKey,
-            start: taskAddStart,
-            duration: taskAddDuration,
-          });
+          // 定时（带时间）/ 全天（勾选）/ 收集区（都不填）三种排期模式。
+          const schedule = taskAddAllDay
+            ? { date: dateKey }
+            : taskAddStart || taskAddDuration
+              ? { date: dateKey, start: taskAddStart, duration: taskAddDuration }
+              : {};
+          const task = inbox.addTask({ title: taskDraft, ...schedule });
           addingTask = false;
           taskDraft = '';
           taskAddStart = '';
           taskAddDuration = '';
+          taskAddAllDay = false;
           formError = null;
           announcement = {
             scope: 'task',
             text: task.start
               ? `已添加任务「${task.title}」，已同步到日历`
-              : `已添加任务「${task.title}」`,
+              : task.date
+                ? `已添加全天任务「${task.title}」`
+                : `已添加任务「${task.title}」到收集区`,
           };
           focusRequest = { type: 'task-edit-button', id: task.id };
           render();
@@ -698,22 +792,35 @@ export function mount(context) {
       taskEditDuration = durationInput?.value ?? taskEditDuration;
       try {
         const current = inbox.listTasks().find((item) => item.id === id);
-        const task = inbox.updateTask(id, {
-          title: taskEditDraft,
-          date: current?.date ?? dateKey,
-          start: taskEditStart,
-          duration: taskEditDuration,
-        });
+        // 与新增一致：定时 / 全天 / 显式清空日期回到收集区。
+        const changes = { title: taskEditDraft };
+        if (taskEditAllDay) {
+          changes.date = current?.date ?? dateKey;
+          changes.start = '';
+          changes.duration = '';
+        } else if (taskEditStart || taskEditDuration) {
+          changes.date = current?.date ?? dateKey;
+          changes.start = taskEditStart;
+          changes.duration = taskEditDuration;
+        } else {
+          changes.date = '';
+          changes.start = '';
+          changes.duration = '';
+        }
+        const task = inbox.updateTask(id, changes);
         editingTaskId = null;
         taskEditDraft = '';
         taskEditStart = '';
         taskEditDuration = '';
+        taskEditAllDay = false;
         formError = null;
         announcement = {
           scope: 'task',
           text: task.start
             ? `已保存任务「${task.title}」，日历已同步`
-            : `已保存任务「${task.title}」`,
+            : task.date
+              ? `已保存全天任务「${task.title}」`
+              : `已保存任务「${task.title}」到收集区`,
         };
         focusRequest = { type: 'task-edit-button', id };
         render();
@@ -777,7 +884,28 @@ export function mount(context) {
     else if (target.matches('[data-inbox-task-edit-duration]')) taskEditDuration = target.value;
     else if (target.matches('[data-inbox-note-add-input]')) noteDraft = target.value;
     else if (target.matches('[data-inbox-note-edit-input]')) noteEditDraft = target.value;
-    else return;
+    // 全天勾选会改变表单结构（隐藏 / 显示时间字段），需要重绘并保留焦点。
+    else if (target.matches('[data-inbox-task-add-allday]')) {
+      taskAddAllDay = target.checked;
+      if (taskAddAllDay) {
+        taskAddStart = '';
+        taskAddDuration = '';
+      }
+      formError = null;
+      focusRequest = { type: 'task-add-allday' };
+      render();
+      return;
+    } else if (target.matches('[data-inbox-task-edit-allday]')) {
+      taskEditAllDay = target.checked;
+      if (taskEditAllDay) {
+        taskEditStart = '';
+        taskEditDuration = '';
+      }
+      formError = null;
+      focusRequest = { type: 'task-edit-allday' };
+      render();
+      return;
+    } else return;
 
     if (formError) {
       formError = null;
@@ -794,6 +922,7 @@ export function mount(context) {
       taskEditDraft = '';
       taskEditStart = '';
       taskEditDuration = '';
+      taskEditAllDay = false;
       formError = null;
       focusRequest = { type: 'task-edit-button', id };
       render();
@@ -813,6 +942,7 @@ export function mount(context) {
       taskDraft = '';
       taskAddStart = '';
       taskAddDuration = '';
+      taskAddAllDay = false;
       formError = null;
       focusRequest = { type: 'task-add' };
       render();

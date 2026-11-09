@@ -15,7 +15,7 @@ import {
   timeToMinutes,
   toDateKey,
 } from '../../calendar.js';
-import { TASK_STATUS_LABELS } from '../../tasks.js';
+import { TASK_STATUS_LABELS, taskReviewGroups, taskWindow } from '../../tasks.js';
 
 const WEEK_DAYS = 7;
 
@@ -28,6 +28,12 @@ const TASK_STATUS_COLORS = {
 function formatMonthDay(dateKey) {
   const date = parseDateKey(dateKey);
   return date ? `${date.getMonth() + 1}/${date.getDate()}` : dateKey;
+}
+
+/** 「截止 11/8 周日」 label for the overdue review area. */
+export function formatDeadline(dateKey) {
+  const weekday = formatWeekday(dateKey);
+  return `截止 ${formatMonthDay(dateKey)}${weekday ? ` ${weekday}` : ''}`;
 }
 
 function formatWeekday(dateKey) {
@@ -84,6 +90,9 @@ function taskEndClock(task) {
  *   spans to the deadline, so it becomes a long block from today to the due
  *   date. Past deadlines and the legacy no-today call keep the deadline day.
  *
+ * The start / end days come from the shared `taskWindow` mapping, so the
+ * chart agrees with the month grid and the day plan.
+ *
  * Returns null when it has no date / deadline or falls completely outside the
  * rendered week.
  *
@@ -95,20 +104,16 @@ function taskEndClock(task) {
  */
 export function taskChartBar(task, weekStartKey, todayKey = null) {
   if (!task || typeof task !== 'object') return null;
-  const hasDate = typeof task.date === 'string' && Boolean(parseDateKey(task.date));
-  const hasDue = typeof task.due === 'string' && Boolean(parseDateKey(task.due));
-  if (!hasDate && !hasDue) return null;
+  const window = taskWindow(task, typeof todayKey === 'string' ? todayKey : null);
+  if (!window) return null;
 
+  const hasDate = Boolean(window.dateKey);
+  const hasDue = Boolean(window.dueKey);
   const dateOnly = hasDate && !task.start;
   const dueOnly = !hasDate && hasDue;
-  const dueIsLater = hasDue && (!hasDate || task.due > task.date);
-  const startFromToday =
-    dueOnly &&
-    typeof todayKey === 'string' &&
-    Boolean(parseDateKey(todayKey)) &&
-    task.due >= todayKey;
-  const startKey = hasDate ? task.date : startFromToday ? todayKey : task.due;
-  const endKey = dueIsLater ? task.due : hasDate ? task.date : task.due;
+  const dueIsLater = hasDue && window.endKey === window.dueKey && window.dueKey !== window.dateKey;
+  const startKey = window.startKey;
+  const endKey = window.endKey;
 
   const startOffset = dayOffset(startKey, weekStartKey);
   const endOffset = dayOffset(endKey, weekStartKey);
@@ -203,8 +208,14 @@ function taskMeta(task, weekStartKey) {
   return parts.join(' · ');
 }
 
+export { taskMeta };
+
 /**
  * Build the whole week chart model.
+ *
+ * `review` carries the overdue review groups (deadline passed, kept until the
+ * task is deleted): `{ overdue, completed }`. It is independent of the visible
+ * week and excluded from `summary`.
  *
  * @param {{
  *   anchor: Date,
@@ -259,6 +270,9 @@ export function buildWeekChart({ anchor, tasks = [], events = [], today = new Da
 
   const taskRows = rows.filter((row) => row.kind === 'task');
   const done = taskRows.filter((row) => row.status === 'done').length;
+  // 逾期回顾区：截止已过且未删除的任务（与月视图共用同一分组规则），
+  // 不计入本周进度分母。
+  const review = taskReviewGroups(tasks, todayKey);
   const days = weekDays.map((date, index) => ({
     date,
     key: toDateKey(date),
@@ -270,6 +284,7 @@ export function buildWeekChart({ anchor, tasks = [], events = [], today = new Da
   return {
     days,
     rows,
+    review,
     summary: {
       total: taskRows.length,
       done,

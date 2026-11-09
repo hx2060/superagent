@@ -38,50 +38,107 @@ function minutesToTime(minutes) {
   return `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
 }
 
-function normalizeSchedule({ date, start, duration, fallbackDate } = {}) {
-  const startText = String(start ?? '').trim();
-  const durationText = String(duration ?? '').trim();
-  const hasStart = startText !== '';
-  const hasDuration = durationText !== '';
-
-  if (!hasStart && !hasDuration) return null;
-  if (!hasStart || !hasDuration) {
+/**
+ * Normalise the schedule triple (date / start / duration) of a task.
+ *
+ * - `start` + `duration` → timed task bound to `date` (or `fallbackDate`).
+ * - a `date` without times → all-day task on that date; clearing the times
+ *   keeps the bound day (`fallbackDate`) as all-day.
+ * - an explicitly empty `date` ('') without times → unscheduled, back to the
+ *   collecting area; so is an omitted date without a fallback.
+ *
+ * `fallbackStart` / `fallbackDuration` let a date-only change move a timed
+ * task without dropping its times.
+ */
+function normalizeSchedule({
+  date,
+  start,
+  duration,
+  fallbackDate,
+  fallbackStart,
+  fallbackDuration,
+} = {}) {
+  const startMentioned = start !== undefined;
+  const durationMentioned = duration !== undefined;
+  if (startMentioned !== durationMentioned) {
     throw invalid('INBOX_TASK_SCHEDULE_INVALID', '请同时填写开始时间和持续时间');
   }
 
-  const startMinutes = timeToMinutes(startText);
-  if (!Number.isFinite(startMinutes)) {
-    throw invalid('INBOX_TASK_SCHEDULE_INVALID', '开始时间格式应为 HH:mm');
-  }
-  if (startMinutes < TASK_SCHEDULE_START || startMinutes >= TASK_SCHEDULE_END) {
-    throw invalid('INBOX_TASK_SCHEDULE_INVALID', '开始时间需在 07:00–20:59 之间');
-  }
-
-  const durationMinutes = Number(durationText);
-  if (
-    !Number.isInteger(durationMinutes) ||
-    durationMinutes < TASK_DURATION_MIN ||
-    durationMinutes > TASK_DURATION_MAX
-  ) {
-    throw invalid(
-      'INBOX_TASK_SCHEDULE_INVALID',
-      `持续时间需为 ${TASK_DURATION_MIN}–${TASK_DURATION_MAX} 分钟的整数`
-    );
-  }
-  if (startMinutes + durationMinutes > TASK_SCHEDULE_END) {
-    throw invalid('INBOX_TASK_SCHEDULE_INVALID', '结束时间不得晚于 21:00（时间表范围 07:00–21:00）');
+  // An explicitly empty date ('') unbinds the task back to the collecting
+  // area; pairing it with explicit times is rejected (times need a day).
+  if (date === '') {
+    if (startMentioned && String(start).trim() !== '') {
+      throw invalid('INBOX_TASK_SCHEDULE_INVALID', '任务日期必须是 YYYY-MM-DD');
+    }
+    return null;
   }
 
-  const parsedDate = parseDateKey(String(date ?? fallbackDate ?? ''));
-  if (!parsedDate) {
-    throw invalid('INBOX_TASK_SCHEDULE_INVALID', '任务日期必须是 YYYY-MM-DD');
+  // Times mentioned in `changes` replace the stored ones; a date-only change
+  // keeps them (so a timed task can be moved without losing its time).
+  const fallbackHasPair = Boolean(fallbackStart) && Boolean(fallbackDuration);
+  const startText = String(startMentioned ? start : fallbackHasPair ? fallbackStart : '').trim();
+  const durationText = String(
+    durationMentioned ? duration : fallbackHasPair ? fallbackDuration : ''
+  ).trim();
+  const hasStart = startText !== '';
+  const hasDuration = durationText !== '';
+  if (hasStart !== hasDuration) {
+    throw invalid('INBOX_TASK_SCHEDULE_INVALID', '请同时填写开始时间和持续时间');
   }
 
-  return {
-    date: toDateKey(parsedDate),
-    start: minutesToTime(startMinutes),
-    duration: durationMinutes,
-  };
+  if (hasStart && hasDuration) {
+    const startMinutes = timeToMinutes(startText);
+    if (!Number.isFinite(startMinutes)) {
+      throw invalid('INBOX_TASK_SCHEDULE_INVALID', '开始时间格式应为 HH:mm');
+    }
+    if (startMinutes < TASK_SCHEDULE_START || startMinutes >= TASK_SCHEDULE_END) {
+      throw invalid('INBOX_TASK_SCHEDULE_INVALID', '开始时间需在 07:00–20:59 之间');
+    }
+
+    const durationMinutes = Number(durationText);
+    if (
+      !Number.isInteger(durationMinutes) ||
+      durationMinutes < TASK_DURATION_MIN ||
+      durationMinutes > TASK_DURATION_MAX
+    ) {
+      throw invalid(
+        'INBOX_TASK_SCHEDULE_INVALID',
+        `持续时间需为 ${TASK_DURATION_MIN}–${TASK_DURATION_MAX} 分钟的整数`
+      );
+    }
+    if (startMinutes + durationMinutes > TASK_SCHEDULE_END) {
+      throw invalid('INBOX_TASK_SCHEDULE_INVALID', '结束时间不得晚于 21:00（时间表范围 07:00–21:00）');
+    }
+
+    const parsedDate = parseDateKey(String(date ?? fallbackDate ?? ''));
+    if (!parsedDate) {
+      throw invalid('INBOX_TASK_SCHEDULE_INVALID', '任务日期必须是 YYYY-MM-DD');
+    }
+
+    return {
+      date: toDateKey(parsedDate),
+      start: minutesToTime(startMinutes),
+      duration: durationMinutes,
+    };
+  }
+
+  const dateText = date === undefined || date === null ? '' : String(date).trim();
+  if (dateText) {
+    const parsedDate = parseDateKey(dateText);
+    if (!parsedDate) {
+      throw invalid('INBOX_TASK_SCHEDULE_INVALID', '任务日期必须是 YYYY-MM-DD');
+    }
+    return { date: toDateKey(parsedDate) };
+  }
+  if (fallbackDate) return { date: fallbackDate };
+  return null;
+}
+
+/** A deadline written before the task's own day is contradictory data. */
+function assertDueNotBeforeDate(dueDate, dateKey) {
+  if (dueDate && dateKey && dueDate < dateKey) {
+    throw invalid('INBOX_TASK_DUE_INVALID', '截止日期不能早于任务日期');
+  }
 }
 
 export function normalizeTaskTitle(value) {
@@ -135,6 +192,9 @@ function createDefaultIdFactory() {
  *   end?: string,
  *   due?: string
  * }} InboxTask
+ *
+ * A task without `date` and `due` is unscheduled and lives in the collecting
+ * area; a `date` without `start` / `duration` is an all-day task on that day.
  *
  * @typedef {{
  *   id: string,
@@ -224,6 +284,7 @@ export function createInboxStore({ tasks = [], notes = [], idFactory } = {}) {
     const titleText = normalizeTaskTitle(title);
     const schedule = normalizeSchedule({ date, start, duration });
     const dueDate = normalizeTaskDue(due);
+    assertDueNotBeforeDate(dueDate, schedule?.date);
     const requestedId = typeof id === 'string' ? id.trim() : '';
     const task = {
       id: '',
@@ -251,35 +312,46 @@ export function createInboxStore({ tasks = [], notes = [], idFactory } = {}) {
 
   function updateTask(id, changes = {}) {
     const { task } = findTask(id);
-    if (changes.title !== undefined) task.title = normalizeTaskTitle(changes.title);
-    if (changes.icon !== undefined) task.icon = normalizeTaskIcon(changes.icon);
 
-    if (Object.prototype.hasOwnProperty.call(changes, 'due')) {
-      const dueDate = normalizeTaskDue(changes.due);
-      if (dueDate) {
-        task.due = dueDate;
-      } else {
-        delete task.due;
-      }
-    }
+    // Compute everything before mutating, so a rejected change leaves the
+    // stored task untouched (no half-applied title / schedule).
+    const nextTitle = changes.title !== undefined ? normalizeTaskTitle(changes.title) : task.title;
+    const nextIcon = changes.icon !== undefined ? normalizeTaskIcon(changes.icon) : task.icon;
+
+    const nextDue = Object.prototype.hasOwnProperty.call(changes, 'due')
+      ? normalizeTaskDue(changes.due)
+      : task.due;
 
     const hasScheduleField = ['date', 'start', 'duration'].some((key) =>
       Object.prototype.hasOwnProperty.call(changes, key)
     );
+    let nextSchedule = null;
     if (hasScheduleField) {
-      const schedule = normalizeSchedule({
+      nextSchedule = normalizeSchedule({
         date: changes.date,
         start: changes.start,
         duration: changes.duration,
         fallbackDate: task.date,
+        fallbackStart: task.start,
+        fallbackDuration: task.duration,
       });
-      if (schedule) {
-        Object.assign(task, schedule);
-      } else {
-        delete task.date;
-        delete task.start;
-        delete task.duration;
-      }
+    }
+
+    const nextDate = hasScheduleField ? nextSchedule?.date ?? null : task.date ?? null;
+    assertDueNotBeforeDate(nextDue ?? null, nextDate);
+
+    task.title = nextTitle;
+    task.icon = nextIcon;
+    if (Object.prototype.hasOwnProperty.call(changes, 'due')) {
+      if (nextDue) task.due = nextDue;
+      else delete task.due;
+    }
+    if (hasScheduleField) {
+      delete task.date;
+      delete task.start;
+      delete task.duration;
+      delete task.end;
+      if (nextSchedule) Object.assign(task, nextSchedule);
     }
 
     notify();
@@ -314,6 +386,11 @@ export function createInboxStore({ tasks = [], notes = [], idFactory } = {}) {
 
   function taskProgress() {
     return taskStatusCounts(taskItems, statuses);
+  }
+
+  /** Unscheduled tasks (no `date`, no `due`) — the collecting area. */
+  function listUnscheduledTasks() {
+    return taskItems.filter((task) => !task.date && !task.due).map(presentTask);
   }
 
   function listCalendarEvents(dateKey) {
@@ -393,6 +470,7 @@ export function createInboxStore({ tasks = [], notes = [], idFactory } = {}) {
 
   return {
     listTasks,
+    listUnscheduledTasks,
     addTask,
     updateTask,
     deleteTask,

@@ -9,7 +9,7 @@
  */
 
 import { TASK_STATUS_LABELS } from '../../tasks.js';
-import { buildWeekChart } from './chart.js';
+import { buildWeekChart, formatDeadline, taskMeta } from './chart.js';
 
 const STATUS_CYCLE_HINT = '待完成 → 部分完成 → 完成';
 const EVENT_DOT_COLORS = {
@@ -67,6 +67,71 @@ function gridCells(days) {
         `<span class="mod-week-chart-grid-day${index === 0 ? ' is-first' : ''}${day.isToday ? ' is-today' : ''}"></span>`
     )
     .join('');
+}
+
+/** One row of the overdue review area: toggle + title + deadline, no bar. */
+function reviewRow(task, weekStartKey) {
+  const id = escapeHtml(task.id);
+  const title = escapeHtml(task.title);
+  const status = task.status ?? 'todo';
+  const statusLabel = TASK_STATUS_LABELS[status] ?? status;
+  const meta = taskMeta(task, weekStartKey);
+  const due = escapeHtml(task.due);
+  return `<div class="mod-week-chart-review-row" data-week-chart-review-row="${id}" data-status="${status}">
+    <div class="mod-week-chart-label">
+      <button
+        type="button"
+        class="mod-week-chart-toggle"
+        data-task-toggle="${id}"
+        data-status="${status}"
+        aria-label="切换任务「${title}」的状态，当前${statusLabel}"
+        title="点击切换：${STATUS_CYCLE_HINT}"
+      >${checkIcon(status)}</button>
+      <span class="mod-week-chart-label-copy">
+        <button
+          type="button"
+          class="mod-week-chart-title${status === 'done' ? ' is-done' : ''}"
+          data-open-date="${due}"
+          title="${title}${meta ? ` · ${escapeHtml(meta)}` : ''}"
+        >${title}</button>
+        ${meta ? `<span class="mod-week-chart-meta">${escapeHtml(meta)}</span>` : ''}
+      </span>
+    </div>
+    <div class="mod-week-chart-track">
+      <span class="mod-week-chart-review-due">${formatDeadline(task.due)}</span>
+    </div>
+  </div>`;
+}
+
+/**
+ * Overdue review area: tasks whose deadline has passed, split into
+ * 逾期未完成 / 已完成 and kept until deletion. Independent of the visible
+ * week and excluded from the week progress summary.
+ */
+function renderReview(review, weekStartKey) {
+  const groups = [
+    { key: 'overdue', title: '逾期未完成', tasks: review.overdue },
+    { key: 'completed', title: '已完成', tasks: review.completed },
+  ].filter((group) => group.tasks.length > 0);
+  if (groups.length === 0) return '';
+
+  const total = review.overdue.length + review.completed.length;
+  const groupsHtml = groups
+    .map(
+      (group) => `<div class="mod-week-chart-review-group" data-review-group="${group.key}">
+        <span class="mod-week-chart-review-group-title">${group.title} ${group.tasks.length}</span>
+        ${group.tasks.map((task) => reviewRow(task, weekStartKey)).join('')}
+      </div>`
+    )
+    .join('');
+
+  return `<div class="mod-week-chart-review" data-week-chart-review>
+    <div class="mod-week-chart-review-bar">
+      <span class="mod-week-chart-review-title">逾期回顾</span>
+      <span class="mod-week-chart-review-count">共 ${total} 项 · 截止已过，保留供回顾</span>
+    </div>
+    ${groupsHtml}
+  </div>`;
 }
 
 function rowLabel(row) {
@@ -206,6 +271,9 @@ export function mount(context) {
           <span>在日视图清单里给任务填写开始时间，任务会出现在这里；带截止日期的任务会标在截止当天。</span>
         </div>`;
 
+    const weekStartKey = model.days[0].key;
+    const reviewHtml = renderReview(model.review, weekStartKey);
+
     root.innerHTML = `<div class="mod-week-chart" role="table" aria-label="本周任务与时间">
       <div class="mod-week-chart-head" role="row">
         <div class="mod-week-chart-corner" role="columnheader">
@@ -217,6 +285,7 @@ export function mount(context) {
         </div>
         <div class="mod-week-chart-days" role="presentation">${daysHtml}</div>
       </div>
+      ${reviewHtml}
       <div class="mod-week-chart-body" role="rowgroup">
         ${rowsHtml || empty}
       </div>

@@ -202,6 +202,116 @@ button {
   min-width: 0;
 }
 
+/* 逾期回顾横幅：截止已过且未删除的任务，保留供回顾（与周图回顾区同规则）。 */
+.month-review {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-muted);
+}
+
+.month-review-title {
+  color: var(--danger);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.month-review-count {
+  color: var(--muted);
+  font-size: 10.5px;
+}
+
+.month-review-groups {
+  display: flex;
+  flex: 1 0 100%;
+  flex-wrap: wrap;
+  gap: 4px 18px;
+}
+
+.month-review-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  min-width: 0;
+}
+
+.month-review-group-title {
+  color: var(--text-2);
+  font-size: 10.5px;
+  font-weight: 600;
+}
+
+.month-review-items {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  min-width: 0;
+}
+
+.month-review-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  padding: 2px 8px 2px 2px;
+  border-radius: 999px;
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--line-soft);
+}
+
+.month-review-item .task-check {
+  width: 18px;
+  height: 18px;
+  margin-left: 0;
+  border-width: 1.5px;
+}
+
+.month-review-item[data-status='partial'] .task-check {
+  border-color: var(--d-coral-deep);
+  background: conic-gradient(var(--d-coral) 0 50%, var(--d-card) 50% 100%);
+}
+
+.month-review-item[data-status='done'] .task-check {
+  border-color: #0f9b8e;
+  background: #0f9b8e;
+}
+
+.month-review-item .month-review-task {
+  overflow: hidden;
+  max-width: 220px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.month-review-item .month-review-task:hover {
+  color: var(--accent-strong);
+  text-decoration: underline;
+}
+
+.month-review-item[data-status='done'] .month-review-task {
+  color: var(--muted);
+  text-decoration: line-through;
+}
+
+.month-review-due {
+  flex: none;
+  color: var(--muted);
+  font-size: 10px;
+}
+
 .month-weekdays {
   display: grid;
   flex: none;
