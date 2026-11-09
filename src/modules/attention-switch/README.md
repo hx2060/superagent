@@ -179,7 +179,7 @@ interface PoolItem {
 **做什么：**
 
 - 新模块 `src/modules/attention-switch/`：store（纯逻辑）+ UI + 样式 + node:test，遵守 `mount(context)` 契约。
-- 主干按既有模式做最小登记（均需评审）：日视图一个槽位 `<div data-module-root="attention-switch"></div>`；`index.html` 一行样式 `<link>`；`src/app.js` 创建 store 并作为可选键传入 `services.pool`（沿用 `daily-tasks` 先例）；`window.schedule.pool` 作为 dsh 运行时接口；`src/data.js` 增加本地池内容的可选读取。
+- 主干按既有模式做最小登记（均需评审）：**入口位置待确认（见第 9 节）**——默认为日视图一个槽位 `<div data-module-root="attention-switch"></div>`（改动最小，需先处于日视图进池）；若要求任何视图一键进池，则改为工具栏登记（改动略增）。其余：`index.html` 一行样式 `<link>`；`src/app.js` 创建 store 并作为可选键传入 `services.pool`（沿用 `daily-tasks` 先例）；`window.schedule.pool` 作为 dsh 运行时接口；`src/data.js` 增加本地池内容的可选读取。
 - 界面：日视图出现「蓄水池」入口 → 点击进入蓄水池界面（模块 root 内切换，不新增视图）：
   - 三档切换：娱乐性学习 / 简单看过 / 理解学习；
   - 每档呈现几个选项（暂定 5 个；排序暂定「会话内未取用过优先，同级按加入时间倒序」，预留后续调整空间）；
@@ -214,11 +214,12 @@ interface PoolItem {
 - **DOM 契约**：`[data-module-root="attention-switch"]`、`[data-attention-switch-tier]`、`[data-attention-switch-option="<id>"]`、`[data-attention-switch-add-toggle]`、`[data-attention-switch-form]`、`[data-attention-switch-input]`、`[data-attention-switch-live]`。
 - **错误码**：`POOL_TITLE_INVALID` / `POOL_SOURCE_INVALID` / `POOL_TIER_INVALID` / `POOL_URL_INVALID` / `POOL_DUPLICATE_ID` / `POOL_NOT_FOUND`。
 
-## 9. 待需求方确认
+## 9. 待需求方确认（进入实现前）
 
 1. **Q1 档位归属**：按建议的「多档」，还是从简「一档」？
-2. **首版范围**：7.3 的「做什么 / 明确不做」是否认可？认可即进入实现（按 `AGENTS.md` 接口登记点落地，接口提案随 PR 评审）。
-3. **（工作区，独立事项）**：会话工作区迁移仍未定——A 保持现状（会话名义目录 其他，工作都在日程）或 B 结束本工单、按日程路由重建。与模块实现独立，可稍后回答。
+2. **入口位置**：默认日视图槽位（主干改动最小；需先切换到日视图再进池），还是工具栏常驻入口（任何视图一键进池，主干改动略增）？
+3. **首版范围**：7.3 的「做什么 / 明确不做」是否认可？其中暂定值如无异议即按此实现：每档 5 个选项；排序「会话内未取用过优先 + 加入时间倒序」；「从清单加入」列全部清单任务、来源默认「工作」；URL 仅 http(s)；条目会话内可增删、刷新回到本地文件初值。
+4. **（工作区，独立事项）**：会话工作区迁移仍未定——A 保持现状（会话名义目录 其他，工作都在日程）或 B 结束本工单、按日程路由重建。与模块实现独立，可稍后回答。
 
 ## 10. 边界与约束（不随方案改变）
 
