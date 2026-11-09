@@ -1,6 +1,6 @@
 # 日程 · 对接文档
 
-版本：`0.5`
+版本：`0.6`
 配套接口：`docs/interfaces.md`、`docs/schedule-api.md`、`docs/mechanism-handoff.md`
 
 本文档描述如何把「日程」接到真实数据源、如何新增模块，以及本地 / 公网预览的注意事项。当前实现是**零依赖静态页 + 空白种子 + 可选本地内容文件**，尚未接入后端；文中标注“建议”或“尚未实现”的部分属于后续对接契约，不是现有能力。具体日程内容不提交仓库，见 `docs/mechanism-handoff.md`。
@@ -14,7 +14,7 @@ npm start                 # 本地静态服务，默认 http://127.0.0.1:4173
 - 入口：`index.html` → `src/app.js`。
 - 数据：`src/data.js` 的 `sampleEvents` / `sampleNotes` / `sampleTasks` / `sampleDailyTasks` 是空白种子；页面启动时优先读取 **`local/schedule.json`**（不提交仓库，缺失时回退到空白种子）。
 - 状态：视图、锚点日期、清单 / 便签、每日任务定义与按日状态都在页面内存中；刷新后回到本地内容文件 / 空白种子的初始状态。
-- 清单 / 便签的增删改由 `src/modules/inbox` 负责，store 通过 `services.inbox` 注入；清单任务可选时间会在日视图时间表派生事件，并按日期进入周图与月视图。
+- 清单 / 便签的增删改由 `src/modules/inbox` 负责，store 通过 `services.inbox` 注入；「清单」面板分当日计划与收集区，定时 / 全天 / 仅截止任务按 `src/tasks.js` 的共享映射进入日视图当日计划、周图与月视图，截止已过的任务进入周 / 月逾期回顾区。
 - 周视图由 `src/modules/week-chart/` 渲染任务 × 时间方块；它读取 `services.inbox` 的任务与 `data.events`。
 - 每日任务：日视图顶部由 `src/modules/daily-tasks/` 模块渲染；定义来自 `sampleDailyTasks` / 本地内容，按日完成状态由 `services.dailyTasks` 保存。dsh 运行时接口为 `window.schedule.dailyTasks`。
 - 目前没有后端持久化；页面内编辑不写回本地文件，持久内容由机器人 / 使用者写入 `local/schedule.json`。
@@ -123,7 +123,7 @@ interface CalendarDataSource {
 }
 ```
 
-任务（全局 Inbox，无日期；`due` 为可选截止日期）：
+任务（未排期 = 收集区，无日期无截止；`due` 为可选截止日期且不得早于 `date`）：
 
 ```json
 {
@@ -263,7 +263,7 @@ src/modules/inbox/
 - `index.html`：加载模块样式的一行 `<link>`。
 - `src/data.js`：`sampleTasks` / `sampleNotes`（当前为空数组）。
 
-任务时间同步：没有时间字段的任务只留在清单；填写 `start` + `duration` 后绑定日期，`listCalendarEvents(date)` 派生 teal 时间表事件，同时进入周图与月视图；只填 `due` 的任务在截止日显示。删除为两步确认，刷新后回到本地内容 / 空白初始状态。
+任务时间同步：没有日期与截止的任务留在「收集区」（不计入日进度）；填写 `start` + `duration` 后绑定日期，`listCalendarEvents(date)` 派生 teal 时间表事件，进入当日计划、周图与月视图；只填 `date` 为全天任务（不进时间表）；只填 `due` 的任务在截止前进入当日计划、截止日进周 / 月视图，截止后进逾期回顾区。删除为两步确认，刷新后回到本地内容 / 空白初始状态。
 
 ### 3.6 新模块接入演练（示例）
 
