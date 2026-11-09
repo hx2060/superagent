@@ -324,6 +324,7 @@ exampleView = mountExample({
 ## 4. 本地与公网预览
 
 - 本地：`npm start` 启动零依赖静态服务；仅供开发。
+- 本地 / 测试两个实例：同代码、不同端口、不同 `/local/schedule.json`（见 README「两个实例」）；测试实例用 `npm start -- --content local/examples`，例子由 `scripts/gen-examples.mjs` 生成。
 - 公网：必须使用**脱敏副本**（只含 `index.html`、`assets/`、`src/`；不含 `.git`、`.design-local`、`.local`、`local/`、`docs/`、测试与本机路径），由临时静态服务 / 反向代理提供。
 - 预览 URL、目录、创建时间和自动清理时间要记录；到期删除。
 - 不要公开仓库、设计备选源文件、凭据、飞书私有内容或预览生成脚本的私有产物。
