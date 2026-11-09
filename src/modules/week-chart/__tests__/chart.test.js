@@ -207,3 +207,37 @@ test('周图：没有任务和日程时返回空行与零进度', () => {
   assert.deepEqual(model.summary, { total: 0, done: 0, percent: 0 });
   assert.equal(model.days.length, 7);
 });
+
+test('周图：逾期回顾区按完成与否分组，且不计入本周进度', () => {
+  const model = buildWeekChart({
+    anchor: new Date(2026, 10, 4),
+    today: new Date(2026, 10, 7),
+    tasks: [
+      task({ id: 'task-overdue', title: '逾期未完成', due: '2026-11-05' }),
+      task({ id: 'task-overdue-done', title: '逾期已完成', due: '2026-11-01', status: 'done' }),
+      task({ id: 'task-future', title: '未来截止', due: '2026-11-20' }),
+      task({ id: 'task-past-timed', title: '往日定时', date: '2026-11-03', start: '09:00', duration: 30 }),
+    ],
+  });
+
+  assert.deepEqual(
+    model.review.overdue.map((item) => item.id),
+    ['task-overdue']
+  );
+  assert.deepEqual(
+    model.review.completed.map((item) => item.id),
+    ['task-overdue-done']
+  );
+  // 往日定时（无截止）与逾期已完成都不进回顾区；本周进度只数可见行
+  // （截止日本周内的逾期任务仍画方块，未来截止从今天起画，往日定时各占一天）。
+  assert.deepEqual(model.summary, { total: 3, done: 0, percent: 0 });
+});
+
+test('周图：本周没有截止已过任务时回顾区为空', () => {
+  const model = buildWeekChart({
+    anchor: new Date(2026, 10, 16),
+    today: new Date(2026, 10, 7),
+    tasks: [task({ due: '2026-11-20' })],
+  });
+  assert.deepEqual(model.review, { overdue: [], completed: [] });
+});

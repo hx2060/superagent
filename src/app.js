@@ -28,18 +28,23 @@ import {
   sampleNotes,
   sampleTasks,
 } from './data.js';
-import { taskMonthAnchors } from './tasks.js';
+import { TASK_STATUS_LABELS, taskMonthAnchors, taskReviewGroups } from './tasks.js';
 import { createDailyTaskStore, mount as mountDailyTasks } from './modules/daily-tasks/index.js';
 import { createInboxStore, mount as mountInbox } from './modules/inbox/index.js';
 import { mount as mountWeekChart } from './modules/week-chart/index.js';
 
 const VIEWS = new Set(['month', 'week', 'day']);
-const today = startOfDay(new Date());
 const TASK_STATUS_COLORS = { todo: 'blue', partial: 'orange', done: 'teal' };
+
+// Read "today" per render so a page left open past midnight keeps agreeing
+// with the week chart and the day plan.
+function currentToday() {
+  return startOfDay(new Date());
+}
 
 const state = {
   view: 'month',
-  anchor: today,
+  anchor: currentToday(),
 };
 
 // Concrete schedules live in the git-ignored local/schedule.json; the committed
@@ -151,7 +156,7 @@ const tasksApi = Object.freeze({
 });
 
 window.schedule = Object.freeze({
-  version: '0.5',
+  version: '0.6',
   tasks: tasksApi,
   dailyTasks: dailyTasksApi,
 });
@@ -191,7 +196,7 @@ function monthItems() {
   for (const event of events) {
     add(event.date, timeToMinutes(event.start), eventChip(event));
   }
-  const todayKey = toDateKey(today);
+  const todayKey = toDateKey(currentToday());
   for (const task of inbox.listTasks()) {
     for (const anchor of taskMonthAnchors(task, todayKey)) {
       const sort = anchor.due
@@ -206,10 +211,74 @@ function monthItems() {
   return map;
 }
 
+/** 截止 11/8 style label for the overdue review banner. */
+function formatDeadlineLabel(dateKey) {
+  const date = parseDateKey(dateKey);
+  return date ? `截止 ${date.getMonth() + 1}月${date.getDate()}日` : '截止';
+}
+
+/**
+ * Month-view overdue review banner: tasks whose deadline has passed, split
+ * into 逾期未完成 / 已完成 and kept until deletion (shared grouping with the
+ * week chart). Status can be toggled here; titles jump to the deadline day.
+ */
+function renderMonthReview() {
+  const review = taskReviewGroups(inbox.listTasks(), toDateKey(currentToday()));
+  const groups = [
+    { key: 'overdue', title: '逾期未完成', tasks: review.overdue },
+    { key: 'completed', title: '已完成', tasks: review.completed },
+  ].filter((group) => group.tasks.length > 0);
+  if (groups.length === 0) return '';
+
+  const total = review.overdue.length + review.completed.length;
+  const groupsHtml = groups
+    .map(
+      (group) => `<div class="month-review-group" data-review-group="${group.key}">
+        <span class="month-review-group-title">${group.title} ${group.tasks.length}</span>
+        <span class="month-review-items">
+          ${group.tasks
+            .map((task) => {
+              const id = escapeHtml(task.id);
+              const title = escapeHtml(task.title);
+              const status = task.status ?? 'todo';
+              const statusLabel = TASK_STATUS_LABELS[status] ?? status;
+              return `<span class="month-review-item" data-review-item="${id}" data-status="${status}">
+                <button
+                  type="button"
+                  class="task-check"
+                  data-task-toggle="${id}"
+                  data-status="${status}"
+                  aria-label="切换任务「${title}」的状态，当前${statusLabel}"
+                  title="点击切换：待完成 → 部分完成 → 完成"
+                ></button>
+                <button
+                  type="button"
+                  class="month-review-task"
+                  data-open-date="${escapeHtml(task.due)}"
+                  title="${title} · ${formatDeadlineLabel(task.due)}"
+                >${title}</button>
+                <span class="month-review-due">${formatDeadlineLabel(task.due)}</span>
+              </span>`;
+            })
+            .join('')}
+        </span>
+      </div>`
+    )
+    .join('');
+
+  return `<div class="month-review" data-month-review>
+    <span class="month-review-title">逾期回顾</span>
+    <span class="month-review-count">共 ${total} 项 · 截止已过，保留供回顾</span>
+    <div class="month-review-groups">${groupsHtml}</div>
+  </div>`;
+}
+
 function renderMonth() {
+  const today = currentToday();
   const monthDays = buildMonthMatrix(state.anchor);
   const month = state.anchor.getMonth();
   const itemsByDate = monthItems();
+  const reviewHtml = renderMonthReview();
 
   const weekdayRow = WEEKDAY_LABELS.map(
     (label) => `<div class="month-weekday">周${label}</div>`
@@ -243,6 +312,7 @@ function renderMonth() {
     .join('');
 
   return `<div class="month-view">
+    ${reviewHtml}
     <div class="month-weekdays">${weekdayRow}</div>
     <div class="month-grid">${cells}</div>
   </div>`;
@@ -272,6 +342,7 @@ function eventIcon(name) {
 }
 
 function renderDayWeekStrip() {
+  const today = currentToday();
   const days = getWeekDays(state.anchor);
   const grouped = groupEventsByDate(events);
 
@@ -354,7 +425,7 @@ function renderDayTimeline(dayEvents) {
   const now = new Date();
   const nowMinutes = now.getHours() * 60 + now.getMinutes();
   const nowLine =
-    isSameDay(state.anchor, today) && nowMinutes >= startMinutes && nowMinutes <= endMinutes
+    isSameDay(state.anchor, currentToday()) && nowMinutes >= startMinutes && nowMinutes <= endMinutes
       ? `<div class="day-now" style="top:${toPercent(nowMinutes)}%"><span></span></div>`
       : '';
 
@@ -509,6 +580,17 @@ document.addEventListener('click', (event) => {
   const viewButton = event.target.closest('.view-switch [data-view]');
   if (viewButton) {
     setView(viewButton.dataset.view);
+    return;
+  }
+
+  // 月视图逾期回顾区的状态切换（与清单 / 周图同一契约）。模块 root 内的切换
+  // 由模块自己处理；模块会在冒泡到达 document 前同步重绘、 detach 事件目标，
+  // 因此这里只认主干渲染的月视图回顾横幅，避免重复切换。
+  const toggle = event.target.closest('[data-task-toggle]');
+  if (toggle) {
+    if (toggle.closest('[data-month-review]')) {
+      inbox.cycleTaskStatus(toggle.dataset.taskToggle);
+    }
     return;
   }
 

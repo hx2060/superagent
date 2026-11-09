@@ -285,7 +285,7 @@ test('任务：时间字段必须成对填写，且开始、持续、结束需�
   assert.equal(store.listTasks().length, 0);
 });
 
-test('任务：修改和清空时间会同步更新或移出时间表', () => {
+test('任务：修改时间、改为全天、显式移除日期', () => {
   const store = createInboxStore({ idFactory: testIds() });
   const task = store.addTask({ title: '先不排期' });
 
@@ -302,12 +302,87 @@ test('任务：修改和清空时间会同步更新或移出时间表', () => {
   assert.equal(store.listCalendarEvents('2026-11-06')[0].end, '15:30');
   assert.equal(store.listTasks()[0].date, '2026-11-06');
 
+  // 清空时间 → 当天天全天任务：保留日期、移出时间表
   store.updateTask(task.id, { start: '', duration: '' });
-  const cleared = store.listTasks()[0];
-  assert.equal(cleared.date, undefined);
-  assert.equal(cleared.start, undefined);
-  assert.equal(cleared.duration, undefined);
+  const allDay = store.listTasks()[0];
+  assert.equal(allDay.date, '2026-11-06');
+  assert.equal(allDay.start, undefined);
+  assert.equal(allDay.duration, undefined);
   assert.equal(store.listCalendarEvents('2026-11-06').length, 0);
+
+  // 只改日期会移动定时任务并保留时间
+  store.updateTask(task.id, { start: '14:00', duration: 90 });
+  store.updateTask(task.id, { date: '2026-11-07' });
+  const moved = store.listTasks()[0];
+  assert.equal(moved.date, '2026-11-07');
+  assert.equal(moved.start, '14:00');
+  assert.equal(moved.end, '15:30');
+  assert.equal(store.listCalendarEvents('2026-11-07').length, 1);
+  assert.equal(store.listCalendarEvents('2026-11-06').length, 0);
+
+  // 显式清空日期 → 回到收集区
+  store.updateTask(task.id, { date: '' });
+  const unscheduled = store.listTasks()[0];
+  assert.equal(unscheduled.date, undefined);
+  assert.equal(unscheduled.start, undefined);
+  assert.equal(store.listCalendarEvents('2026-11-07').length, 0);
+  assert.deepEqual(
+    store.listUnscheduledTasks().map((item) => item.id),
+    [task.id]
+  );
+});
+
+test('任务：只传日期即创建全天任务，不再静默忽略', () => {
+  const store = createInboxStore({ idFactory: testIds() });
+  const task = store.addTask({ title: '全天任务', date: '2026-11-06' });
+
+  assert.equal(task.date, '2026-11-06');
+  assert.equal(task.start, undefined);
+  assert.equal(task.duration, undefined);
+  assert.equal(store.listCalendarEvents('2026-11-06').length, 0);
+  assert.deepEqual(store.listUnscheduledTasks(), []);
+});
+
+test('任务：收集区只包含无日期无截止的任务', () => {
+  const store = createInboxStore({ idFactory: testIds() });
+  store.addTask({ title: '收集区任务' });
+  store.addTask({ title: '定时任务', date: '2026-11-06', start: '09:00', duration: 30 });
+  store.addTask({ title: '全天任务', date: '2026-11-06' });
+  store.addTask({ title: '仅截止任务', due: '2026-11-08' });
+
+  assert.deepEqual(
+    store.listUnscheduledTasks().map((item) => item.title),
+    ['收集区任务']
+  );
+});
+
+test('任务：截止日期早于任务日期时写入报错', () => {
+  const store = createInboxStore({ idFactory: testIds() });
+
+  assert.throws(
+    () => store.addTask({ title: '矛盾任务', date: '2026-11-06', due: '2026-11-05' }),
+    (error) =>
+      error.code === 'INBOX_TASK_DUE_INVALID' && error.message === '截止日期不能早于任务日期'
+  );
+  assert.equal(store.listTasks().length, 0);
+
+  const timed = store.addTask({ title: '定时任务', date: '2026-11-06', start: '09:00', duration: 30 });
+  assert.throws(
+    () => store.updateTask(timed.id, { due: '2026-11-05' }),
+    (error) => error.code === 'INBOX_TASK_DUE_INVALID'
+  );
+  assert.equal(store.listTasks()[0].due, undefined);
+
+  const dueTask = store.addTask({ title: '截止任务', due: '2026-11-08' });
+  assert.throws(
+    () => store.updateTask(dueTask.id, { date: '2026-11-09' }),
+    (error) => error.code === 'INBOX_TASK_DUE_INVALID'
+  );
+  assert.equal(store.listTasks()[1].date, undefined);
+
+  // 截止与任务同日仍然合法
+  const same = store.addTask({ title: '同日任务', date: '2026-11-06', due: '2026-11-06' });
+  assert.equal(same.due, '2026-11-06');
 });
 
 test('任务：状态变化会反映在时间表事件备注中，删除后事件消失', () => {
