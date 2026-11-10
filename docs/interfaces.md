@@ -1,6 +1,6 @@
 # 日程 · 接口说明
 
-版本：`0.7`（PR #3 主干基线 + 每日任务 + 清单 / 便签编辑 + 周图任务 × 时间方块 + 月 / 周 / 日任务统一 + 本地内容与添加接口 + 当日计划 / 收集区分区 + 逾期回顾区 + 全天任务 + 蓄水池（attention-switch）多档选项池）
+版本：`0.8`（PR #3 主干基线 + 每日任务 + 清单 / 便签编辑 + 周图任务 × 时间方块 + 月 / 周 / 日任务统一 + 本地内容与添加接口 + 当日计划 / 收集区分区 + 逾期回顾区 + 全天任务 + 蓄水池（attention-switch）多档选项池 + 月视图跨天长条）
 适用范围：当前静态实现、后续模块与后端对接
 
 本文档说明「日程」当前**已经实现**的模块接口、数据契约与 DOM 契约，以及预留的扩展接口。接口变更必须同步修改本文档，并按 `AGENTS.md` 的规则评审。
@@ -94,7 +94,7 @@ interface Task {
 // 不填 date / due 时是未排期 Inbox（收集区）；填写 date 后绑定该日并同步到日视图
 // 当日计划、周图与月视图。date 不带 start / duration 时为全天任务（进当日计划与
 // 周 / 月视图，不进时间表）。due 在截止日进入月视图与周图；due 晚于 date 时周图
-// 方块从 date 跨到 due。
+// 方块从 date 跨到 due，月视图把跨天窗口画成一条按周行裁剪的长条。
 
 interface DailyTask {
   id: string;                 // 集合内唯一
@@ -131,7 +131,7 @@ interface PoolItem {
 - 月 / 周 / 日视图读取同一份清单任务与事件；日视图还读取当天便签与每日任务定义。
 - **任务占据的日期**由 `src/tasks.js` 的共享纯函数统一计算（`taskWindow` / `taskDayEntry` / `taskReviewGroups`），月视图 chip、周图方块、日视图当日计划三处消费同一答案，不得在视图内另写一套。
 - 周图一个任务一行（定时日程也各占一行）：定时任务占开始当天，带 `due` 时从 `date` 跨到截止日；仅截止任务从今天画到截止日（截止日已过时占截止当天）；方块内显示准确时间或截止日。
-- 月视图在任务 `date` 当天显示任务 chip；`due` 与 `date` 不同时在截止日额外显示「截止」chip。只有 `due` 且 `due` 晚于今天的任务，今天也显示一个开始 chip。
+- 月视图分两种画法，都由 `taskWindow` 派生：**单日任务**（`date` 当天，含 `due` 与 `date` 同日、截止已过收敛到截止当天）显示任务 chip，`due` 与 `date` 不同日时截止日额外显示「截止」chip；**跨天任务**（窗口首尾不同日，含仅截止且截止未到的任务从今天起算）改画**跨天长条**，按周行裁剪、同周行按车道堆叠（最多 3 条，超出的段计入当日「+N 项」），长条内显示任务标题，颜色随任务状态。跨天任务不再在首尾两天各放 chip。
 - **当日计划**（日视图「清单」上半区）成员：截止日 = 当天、排期日 = 当天、或未完成且当天落在任务占据区间内（`taskDayEntry(...).inPlan`）。逾期未完成（截止已过且未完成）不再进入后续日期的计划，改由周 / 月「逾期回顾区」呈现。
 - **日进度**只统计当日计划成员（当日需要完成 + 未来截止未完成）；收集区与逾期任务不计入。跨天后当日计划自动滚动。
 - **逾期回顾区**（周视图图表上方、月视图网格上方横幅）：截止已过且未删除的任务，分「逾期未完成 / 已完成」两组，保留至删除，可切换状态，不计入周进度分母。
@@ -197,9 +197,10 @@ interface PoolItem {
 | `taskWindow(task, todayKey)` | 任务占据的日期窗口 `{ startKey, endKey, dateKey, dueKey }`；仅截止任务在截止未到时从今天起算，已过时占截止当天；无日期无截止返回 `null` |
 | `taskDayEntry(task, dateKey, todayKey)` | 任务在某天的计划成员与状态 `{ inPlan, dueOnDay, scheduledOnDay, overdue, done }`；月 / 周 / 日三视图共用 |
 | `taskReviewGroups(tasks, todayKey)` | 逾期回顾分组 `{ overdue, completed }`：截止已过且未删除的任务，按是否完成分两组 |
-| `taskMonthAnchors(task, todayKey)` | 月视图 chip 锚点（由 `taskWindow` 派生）：窗口首尾两天，截止尾标记 `due` |
+| `taskMonthAnchors(task, todayKey)` | 月视图 chip 锚点（由 `taskWindow` 派生）：单日任务一个锚点，跨天任务首尾两天（跨天任务改画长条，一般不再使用） |
+| `monthSpanBars(tasks, days, todayKey, options?)` | 月视图跨天长条 `{ bars, overflow }`：窗口跨多天的任务按周行裁剪成段，每段带 `{ id, title, status, startKey, endKey, dueKey, overdue, row, startCol, endCol, lane, openDate, clippedStart, clippedEnd }`；`options.maxLanes` 缺省 3，同周行放不下的段进 `overflow`（不计 lane）；单日任务不产生长条 |
 
-`statuses` 是 `Map<taskId, TaskStatus>`，允许覆盖任务初始状态。`taskWindow` / `taskDayEntry` / `taskReviewGroups` 是「任务出现在哪些天、算什么状态」的唯一口径：视图只决定画法（chip / 方块 / 列表行），不得另写一套日期逻辑。
+`statuses` 是 `Map<taskId, TaskStatus>`，允许覆盖任务初始状态。`taskWindow` / `taskDayEntry` / `taskReviewGroups` 是「任务出现在哪些天、算什么状态」的唯一口径：视图只决定画法（chip / 跨天长条 / 方块 / 列表行），不得另写一套日期逻辑。
 
 ### 3.3 `src/modules/inbox/store.js`
 
@@ -343,6 +344,7 @@ store 方法：`addItem` / `updateItem` / `deleteItem` / `listItems` / `listByTi
 | `[data-attention-switch-live]` | 蓄水池面板的 `aria-live="polite"` 播报区域 |
 | `[data-month-review]` | 月视图逾期回顾横幅（主干渲染，可用 `[data-task-toggle]` 切换状态） |
 | `[data-review-item="<id>"]` | 月视图回顾横幅内的任务胶囊 |
+| `[data-month-span-bar]` | 月视图跨天长条；`data-open-date` 指向该段起始日（点击进入日视图） |
 
 ### 4.3 任务状态 UI 契约
 
@@ -351,6 +353,7 @@ store 方法：`addItem` / `updateItem` / `deleteItem` / `listItems` / `listByTi
 - 状态变化向 `[data-task-live]` 写入 `「<title>」已标记为<label>`，供读屏器播报；周图对应写入 `[data-week-chart-live]`。
 - 不填日期与截止的任务属于收集区（未排期，不计入日进度）；填时间后绑定日期并同步到当日计划、时间表、周图与月视图；只填日期为全天任务。
 - 带 `due` 的任务行在状态文案下显示「截止 11月8日 周日」；截止日期不改变状态、进度或时间表，但会在周图 / 月视图的截止日出现。
+- 月视图跨天长条（`[data-month-span-bar]`）只负责进入日视图（`data-open-date` 指向该段起始日），不带状态切换；状态切换沿用清单 / 周图 / 回顾横幅的 `[data-task-toggle]`。长条按任务状态着色（待完成蓝 / 部分完成橙 / 完成青，逾期红），探出周行的一侧为方角。
 - 周图任务行的状态切换与清单一致，按 `todo → partial → done → todo` 循环；`[data-week-chart-progress]` 与进度条同帧更新。
 
 ### 4.4 每日任务 UI 契约
@@ -556,7 +559,7 @@ interface CalendarDataSource {
 
 ### 5.3 dsh 输入接口
 
-`app.js` 暴露只读命名空间 `window.schedule`（`version: '0.7'`），包含任务、每日任务与蓄水池三个运行时接口：
+`app.js` 暴露只读命名空间 `window.schedule`（`version: '0.8'`），包含任务、每日任务与蓄水池三个运行时接口：
 
 ```js
 // 任务：清单 / 日 / 周 / 月共用
@@ -609,7 +612,7 @@ window.schedule.pool.remove('pool-01');
 
 ## 6. 版本与兼容
 
-- 当前接口版本 `0.7`；0.2 增量加入 `DailyTask`、`DailyTasksService`、`window.schedule.dailyTasks` 与每日任务 DOM；0.3 增量加入清单 / 便签 CRUD、任务可选时间字段与日视图时间表派生事件；0.4 增量加入任务可选 `due` 截止日期与行内展示；0.5 增量加入周图模块、月 / 周 / 日任务统一、任务可选 `id`、`window.schedule.tasks`、本地内容文件与机制层交接约定；0.6 增量加入「当日计划 / 收集区」分区与日进度口径、周 / 月逾期回顾区、全天任务（`date` 不带时间）、`due ≥ date` 写入校验、共享任务日期映射（`taskWindow` / `taskDayEntry` / `taskReviewGroups`）与 `listUnscheduledTasks()`；0.7 增量加入蓄水池（`PoolItem` / `PoolService` / `window.schedule.pool`、顶栏常驻入口与面板选择器、本地内容可选 `pool` 键）。已发布字段与稳定选择器保持不变。
+- 当前接口版本 `0.8`；0.2 增量加入 `DailyTask`、`DailyTasksService`、`window.schedule.dailyTasks` 与每日任务 DOM；0.3 增量加入清单 / 便签 CRUD、任务可选时间字段与日视图时间表派生事件；0.4 增量加入任务可选 `due` 截止日期与行内展示；0.5 增量加入周图模块、月 / 周 / 日任务统一、任务可选 `id`、`window.schedule.tasks`、本地内容文件与机制层交接约定；0.6 增量加入「当日计划 / 收集区」分区与日进度口径、周 / 月逾期回顾区、全天任务（`date` 不带时间）、`due ≥ date` 写入校验、共享任务日期映射（`taskWindow` / `taskDayEntry` / `taskReviewGroups`）与 `listUnscheduledTasks()`；0.7 增量加入蓄水池（`PoolItem` / `PoolService` / `window.schedule.pool`、顶栏常驻入口与面板选择器、本地内容可选 `pool` 键）；0.8 增量加入月视图跨天长条（`monthSpanBars` 纯函数、`[data-month-span-bar]` 选择器，跨天任务从「首尾两个 chip」改为「一条按周行裁剪的长条」）。已发布字段与稳定选择器保持不变。
 - 0.6 的行为变化（需在 PR / 迁移说明中告知）：① 日视图「清单」不再展示全部任务，只展示当日计划 + 收集区；② `updateTask` 清空 `start` / `duration` 从「解绑日期」变为「变为全天任务」，解绑需显式 `date: ''`；③ `addTask({ date })` 不再静默忽略日期，而是创建全天任务；④ `due` 早于 `date` 的写入抛 `INBOX_TASK_DUE_INVALID`。
 - 新增字段必须可选，渲染层对未知可选字段保持忽略。
 - 颜色 / 图标 / 状态枚举新增时，需要同时补样式与回退；删除或重命名属于 breaking change。

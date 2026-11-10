@@ -3,11 +3,12 @@
  *
  * `taskWindow` / `taskDayEntry` / `taskReviewGroups` are the single source of
  * truth for "which days does a task occupy and what is its state there". The
- * month grid, the week chart and the day plan all derive from them, so the
- * three views can no longer drift apart (see docs/interfaces.md 3.2).
+ * month grid (chips + span bars), the week chart and the day plan all derive
+ * from them, so the three views can no longer drift apart (see
+ * docs/interfaces.md 3.2).
  */
 
-import { parseDateKey } from './calendar.js';
+import { parseDateKey, toDateKey } from './calendar.js';
 
 export const TASK_STATUS_ORDER = ['todo', 'partial', 'done'];
 
@@ -137,6 +138,9 @@ export function taskReviewGroups(tasks, todayKey) {
  * better). A deadline-only task therefore shows a start chip today and a
  * 「截止」 chip on the deadline day.
  *
+ * Multi-day windows (see {@link monthSpanBars}) draw a span bar instead of
+ * chips, so callers filter those tasks out before using these anchors.
+ *
  * @param {{ date?: string, due?: string }} task
  * @param {string} todayKey local YYYY-MM-DD
  * @returns {Array<{ key: string, due: boolean }>}
@@ -152,4 +156,115 @@ export function taskMonthAnchors(task, todayKey) {
     { key: window.startKey, due: false },
     { key: window.endKey, due: dueEnd },
   ];
+}
+
+/**
+ * @typedef {{
+ *   id: string,
+ *   title: string,
+ *   status: string,
+ *   startKey: string,
+ *   endKey: string,
+ *   dueKey: string|null,
+ *   overdue: boolean,
+ *   row: number,          // 0–5 week row inside the month matrix
+ *   startCol: number,     // 0 (Monday) – 6 (Sunday)
+ *   endCol: number,
+ *   lane: number,         // stacking index inside the week row
+ *   openDate: string,     // first visible day of the segment
+ *   clippedStart: boolean,
+ *   clippedEnd: boolean
+ * }} MonthSpanBar
+ */
+
+/**
+ * Month-view span bars for tasks that occupy more than one day.
+ *
+ * Every task whose window covers more than one day — a scheduled task with a
+ * later deadline, or a deadline-only task running from today — becomes one
+ * bar per week row it crosses, clipped to that row, so the month grid draws
+ * the same "one long block" the week chart draws (see
+ * `src/modules/week-chart/chart.js`). `days` is the 42-day matrix from
+ * `buildMonthMatrix`; segments carry the grid row / column span plus a lane
+ * index so bars sharing a week row stack instead of overlapping.
+ *
+ * Single-day tasks keep their month chips (`taskMonthAnchors`) and produce no
+ * bar. Segments beyond `maxLanes` in one week row are returned as `overflow`
+ * so the caller can still count them (and say so with 「+N 项」).
+ *
+ * @param {object[]} tasks
+ * @param {Date[]} days
+ * @param {string} todayKey local YYYY-MM-DD
+ * @param {{ maxLanes?: number }} [options]
+ * @returns {{ bars: MonthSpanBar[], overflow: MonthSpanBar[] }}
+ */
+export function monthSpanBars(tasks, days, todayKey, options = {}) {
+  const columns = 7;
+  const maxLanes =
+    Number.isInteger(options.maxLanes) && options.maxLanes > 0 ? options.maxLanes : 3;
+  const dayKeys = Array.isArray(days) ? days.map((date) => toDateKey(date)) : [];
+  const rowCount = Math.floor(dayKeys.length / columns);
+  if (rowCount === 0) return { bars: [], overflow: [] };
+
+  const laneEnds = Array.from({ length: rowCount }, () => []);
+  const bars = [];
+  const overflow = [];
+
+  for (const task of Array.isArray(tasks) ? tasks : []) {
+    const window = taskWindow(task, todayKey);
+    if (!window || window.startKey === window.endKey) continue;
+
+    let first = -1;
+    let last = -1;
+    for (let index = 0; index < dayKeys.length; index += 1) {
+      const key = dayKeys[index];
+      if (key < window.startKey || key > window.endKey) continue;
+      if (first === -1) first = index;
+      last = index;
+    }
+    if (first === -1) continue;
+
+    const status = TASK_STATUS_LABELS[task?.status] ? task.status : 'todo';
+    const overdue = Boolean(window.dueKey && window.dueKey < todayKey && status !== 'done');
+
+    for (let row = Math.floor(first / columns); row <= Math.floor(last / columns); row += 1) {
+      const rowStart = row * columns;
+      const segStart = Math.max(first, rowStart);
+      const segEnd = Math.min(last, rowStart + columns - 1);
+      const startCol = segStart - rowStart;
+      const endCol = segEnd - rowStart;
+      const segment = {
+        id: task.id,
+        title: task.title,
+        status,
+        startKey: window.startKey,
+        endKey: window.endKey,
+        dueKey: window.dueKey,
+        overdue,
+        row,
+        startCol,
+        endCol,
+        openDate: dayKeys[segStart],
+        clippedStart: segStart > first,
+        clippedEnd: segEnd < last,
+      };
+
+      const lanes = laneEnds[row];
+      let lane = lanes.findIndex((end) => end < startCol);
+      if (lane === -1) {
+        if (lanes.length >= maxLanes) {
+          overflow.push(segment);
+          continue;
+        }
+        lane = lanes.length;
+      }
+      lanes[lane] = endCol;
+      bars.push({ ...segment, lane });
+    }
+  }
+
+  const byPosition = (a, b) => a.row - b.row || a.startCol - b.startCol || a.endCol - b.endCol;
+  bars.sort((a, b) => byPosition(a, b) || a.lane - b.lane);
+  overflow.sort(byPosition);
+  return { bars, overflow };
 }
