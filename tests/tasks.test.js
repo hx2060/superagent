@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 import {
   TASK_STATUS_ORDER,
+  monthSpanBars,
   nextTaskStatus,
   taskDayEntry,
   taskMonthAnchors,
@@ -10,6 +11,7 @@ import {
   taskStatusCounts,
   taskWindow,
 } from '../src/tasks.js';
+import { buildMonthMatrix } from '../src/calendar.js';
 
 const TODAY = '2026-11-09';
 
@@ -207,6 +209,159 @@ test('taskMonthAnchors：截止与排期同日时只显示排期 chip', () => {
 
 test('taskMonthAnchors：未排期任务不出现在月视图', () => {
   assert.deepEqual(taskMonthAnchors(task({ title: '未排期' }), TODAY), []);
+});
+
+/* ----------------------------------------------------------- monthSpanBars */
+// 2026 年 11 月：11/1 是周日，月矩阵从 10/26（周一）起，共 6 行。
+// row0=10/26–11/1 row1=11/2–11/8 row2=11/9–11/15 row3=11/16–11/22
+// row4=11/23–11/29 row5=11/30–12/6
+const NOVEMBER_DAYS = buildMonthMatrix(new Date(2026, 10, 10));
+const span = (tasks, todayKey = TODAY, options) => monthSpanBars(tasks, NOVEMBER_DAYS, todayKey, options);
+
+test('monthSpanBars：跨天任务在窗口内画一段长条', () => {
+  const { bars, overflow } = span([task({ date: '2026-11-10', due: '2026-11-13' })]);
+  assert.equal(overflow.length, 0);
+  assert.equal(bars.length, 1);
+  assert.deepEqual(
+    { row: bars[0].row, startCol: bars[0].startCol, endCol: bars[0].endCol, lane: bars[0].lane },
+    { row: 2, startCol: 1, endCol: 4, lane: 0 }
+  );
+  assert.equal(bars[0].openDate, '2026-11-10');
+  assert.equal(bars[0].startKey, '2026-11-10');
+  assert.equal(bars[0].endKey, '2026-11-13');
+  assert.equal(bars[0].dueKey, '2026-11-13');
+  assert.equal(bars[0].clippedStart, false);
+  assert.equal(bars[0].clippedEnd, false);
+  assert.equal(bars[0].status, 'todo');
+  assert.equal(bars[0].overdue, false);
+});
+
+test('monthSpanBars：1日到5日跨周时按周行裁剪成两段', () => {
+  const { bars } = span([task({ id: 'a', title: '跨周', date: '2026-11-15', due: '2026-11-19' })]);
+  assert.equal(bars.length, 2);
+  assert.deepEqual(
+    bars.map((bar) => [bar.row, bar.startCol, bar.endCol, bar.clippedStart, bar.clippedEnd]),
+    [
+      [2, 6, 6, false, true],
+      [3, 0, 3, true, false],
+    ]
+  );
+  assert.equal(bars[0].openDate, '2026-11-15');
+  assert.equal(bars[1].openDate, '2026-11-16');
+});
+
+test('monthSpanBars：仅截止任务从今天画到截止日', () => {
+  const { bars } = span([task({ due: '2026-11-12' })], TODAY);
+  assert.deepEqual(
+    bars.map((bar) => [bar.row, bar.startCol, bar.endCol]),
+    [[2, 0, 3]]
+  );
+  assert.equal(bars[0].openDate, TODAY);
+  assert.equal(bars[0].dueKey, '2026-11-12');
+});
+
+test('monthSpanBars：截止已过或窗口在矩阵外的任务不画长条', () => {
+  // 截止已过：窗口收敛到截止当天（单日），交给 chip
+  assert.equal(span([task({ due: '2026-11-05' })]).bars.length, 0);
+  // 整个窗口在 11 月矩阵之前 / 之后
+  assert.equal(span([task({ date: '2026-10-20', due: '2026-10-25' })]).bars.length, 0);
+  assert.equal(span([task({ date: '2026-12-10', due: '2026-12-20' })]).bars.length, 0);
+});
+
+test('monthSpanBars：窗口探出矩阵时只画可见部分并标记裁剪', () => {
+  const { bars } = span([task({ date: '2026-10-28', due: '2026-11-03' })]);
+  assert.deepEqual(
+    bars.map((bar) => [bar.row, bar.startCol, bar.endCol, bar.clippedStart, bar.clippedEnd]),
+    [
+      [0, 2, 6, false, true],
+      [1, 0, 1, true, false],
+    ]
+  );
+
+  const intoDecember = span([task({ date: '2026-11-25', due: '2026-12-03' })]).bars;
+  assert.deepEqual(
+    intoDecember.map((bar) => [bar.row, bar.startCol, bar.endCol, bar.clippedStart, bar.clippedEnd]),
+    [
+      [4, 2, 6, false, true],
+      [5, 0, 3, true, false],
+    ]
+  );
+  assert.equal(intoDecember[1].openDate, '2026-11-30');
+});
+
+test('monthSpanBars：同一周行的长条按 lane 堆叠不重叠', () => {
+  const { bars } = span([
+    task({ id: 'a', date: '2026-11-02', due: '2026-11-05' }),
+    task({ id: 'b', date: '2026-11-03', due: '2026-11-08' }),
+    task({ id: 'c', date: '2026-11-02', due: '2026-11-08' }),
+  ]);
+  // 三条都在第 2 行（11/2–11/8）：a 占 0–3、b 占 1–6、c 占 0–6
+  assert.deepEqual(
+    Object.fromEntries(bars.map((bar) => [bar.id, [bar.row, bar.startCol, bar.endCol, bar.lane]])),
+    {
+      a: [1, 0, 3, 0],
+      b: [1, 1, 6, 1],
+      c: [1, 0, 6, 2],
+    }
+  );
+  // 输出按周行内位置排序，便于渲染层直接顺序绘制
+  assert.deepEqual(
+    bars.map((bar) => bar.id),
+    ['a', 'c', 'b']
+  );
+});
+
+test('monthSpanBars：单周行车道占满后多出的长条进 overflow', () => {
+  const tasks = [
+    task({ id: 'a', date: '2026-11-02', due: '2026-11-08' }),
+    task({ id: 'b', date: '2026-11-03', due: '2026-11-08' }),
+    task({ id: 'c', date: '2026-11-04', due: '2026-11-08' }),
+    task({ id: 'd', date: '2026-11-05', due: '2026-11-08' }),
+  ];
+  const { bars, overflow } = span(tasks, TODAY, { maxLanes: 2 });
+  assert.deepEqual(
+    bars.map((bar) => bar.id),
+    ['a', 'b']
+  );
+  assert.deepEqual(
+    overflow.map((bar) => bar.id),
+    ['c', 'd']
+  );
+  assert.equal(overflow[0].lane, undefined);
+});
+
+test('monthSpanBars：单日任务与未排期任务不产生长条', () => {
+  const { bars, overflow } = span([
+    task({ date: '2026-11-04', start: '09:00', duration: 60 }),
+    task({ date: '2026-11-04', due: '2026-11-04' }),
+    task({ due: TODAY }),
+    task({ title: '未排期' }),
+  ]);
+  assert.equal(bars.length, 0);
+  assert.equal(overflow.length, 0);
+});
+
+test('monthSpanBars：状态与逾期标记随任务透传', () => {
+  const { bars } = span([
+    task({ id: 'done', date: '2026-11-02', due: '2026-11-05', status: 'done' }),
+    task({ id: 'late', date: '2026-11-02', due: '2026-11-05', status: 'partial' }),
+    task({ id: 'weird', date: '2026-11-02', due: '2026-11-05', status: 'nope' }),
+  ]);
+  assert.deepEqual(
+    bars.map((bar) => [bar.id, bar.status, bar.overdue]),
+    [
+      ['done', 'done', false],
+      ['late', 'partial', true],
+      ['weird', 'todo', true],
+    ]
+  );
+});
+
+test('monthSpanBars：非法入参返回空结果', () => {
+  assert.deepEqual(monthSpanBars(null, NOVEMBER_DAYS, TODAY), { bars: [], overflow: [] });
+  assert.deepEqual(monthSpanBars([task()], [], TODAY), { bars: [], overflow: [] });
+  assert.deepEqual(monthSpanBars([task()], null, TODAY), { bars: [], overflow: [] });
+  assert.deepEqual(monthSpanBars([null, 'x'], NOVEMBER_DAYS, TODAY), { bars: [], overflow: [] });
 });
 
 /* ------------------------------------------------------------ status logic */

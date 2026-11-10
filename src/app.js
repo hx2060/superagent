@@ -29,7 +29,13 @@ import {
   samplePool,
   sampleTasks,
 } from './data.js';
-import { TASK_STATUS_LABELS, taskMonthAnchors, taskReviewGroups } from './tasks.js';
+import {
+  TASK_STATUS_LABELS,
+  monthSpanBars,
+  taskMonthAnchors,
+  taskReviewGroups,
+  taskWindow,
+} from './tasks.js';
 import { createDailyTaskStore, mount as mountDailyTasks } from './modules/daily-tasks/index.js';
 import { createInboxStore, mount as mountInbox } from './modules/inbox/index.js';
 import { mount as mountWeekChart } from './modules/week-chart/index.js';
@@ -174,7 +180,7 @@ const poolApi = Object.freeze({
 });
 
 window.schedule = Object.freeze({
-  version: '0.7',
+  version: '0.8',
   tasks: tasksApi,
   dailyTasks: dailyTasksApi,
   pool: poolApi,
@@ -204,8 +210,14 @@ function taskChip(task, due) {
  * Month cells and the day strip show one unified agenda: timed events, tasks
  * bound to a date, and tasks whose deadline falls on that date. This is the
  * mechanism that keeps the checklist, week chart and month grid in sync.
+ *
+ * Tasks that occupy more than one day are drawn as span bars
+ * ({@link monthSpanBars}) instead of chips, so they are skipped here.
+ *
+ * @param {string} todayKey local YYYY-MM-DD
+ * @param {object[]} tasks current inbox tasks
  */
-function monthItems() {
+function monthItems(todayKey, tasks) {
   const map = new Map();
   const add = (key, sort, html) => {
     if (!map.has(key)) map.set(key, []);
@@ -215,8 +227,9 @@ function monthItems() {
   for (const event of events) {
     add(event.date, timeToMinutes(event.start), eventChip(event));
   }
-  const todayKey = toDateKey(currentToday());
-  for (const task of inbox.listTasks()) {
+  for (const task of tasks) {
+    const window = taskWindow(task, todayKey);
+    if (window && window.startKey !== window.endKey) continue;
     for (const anchor of taskMonthAnchors(task, todayKey)) {
       const sort = anchor.due
         ? 24 * 60
@@ -292,35 +305,108 @@ function renderMonthReview() {
   </div>`;
 }
 
+/** 「截止 11/8」 style compact month-day label for span bar tooltips. */
+function formatMonthDay(dateKey) {
+  const date = parseDateKey(dateKey);
+  return date ? `${date.getMonth() + 1}/${date.getDate()}` : dateKey;
+}
+
+/** 「示例任务 · 11/10 – 11/13 · 截止 11月13日 · 待完成」 for a span bar. */
+function monthSpanBarTitle(bar) {
+  const parts = [
+    escapeHtml(bar.title),
+    `${formatMonthDay(bar.startKey)} – ${formatMonthDay(bar.endKey)}`,
+  ];
+  if (bar.dueKey) parts.push(formatDeadlineLabel(bar.dueKey));
+  parts.push(TASK_STATUS_LABELS[bar.status] ?? bar.status);
+  return parts.join(' · ');
+}
+
+/**
+ * One month span bar: a multi-day task drawn as a single block across the days
+ * it occupies (mirroring the week chart). Status picks the color, clipped
+ * ends stay flat so the block reads as continuing into the next / previous
+ * week row.
+ */
+function monthSpanBar(bar) {
+  const color = TASK_STATUS_COLORS[bar.status] ?? 'blue';
+  const classes = ['month-span-bar', `chip--${color}`];
+  if (bar.status === 'done') classes.push('is-done');
+  if (bar.overdue) classes.push('is-overdue');
+  if (bar.clippedStart) classes.push('is-clipped-start');
+  if (bar.clippedEnd) classes.push('is-clipped-end');
+  const label = monthSpanBarTitle(bar);
+  return `<button
+    type="button"
+    class="${classes.join(' ')}"
+    data-month-span-bar
+    style="grid-row:${bar.row + 1};grid-column:${bar.startCol + 1} / span ${bar.endCol - bar.startCol + 1};--month-span-lane:${bar.lane}"
+    data-open-date="${bar.openDate}"
+    title="${label}"
+    aria-label="${label}，打开日视图"
+  ><span class="month-span-bar-label">${escapeHtml(bar.title)}</span></button>`;
+}
+
 function renderMonth() {
   const today = currentToday();
+  const todayKey = toDateKey(today);
   const monthDays = buildMonthMatrix(state.anchor);
   const month = state.anchor.getMonth();
-  const itemsByDate = monthItems();
+  const tasks = inbox.listTasks();
+  const itemsByDate = monthItems(todayKey, tasks);
   const reviewHtml = renderMonthReview();
+
+  // 跨天任务：一条长条按周行裁剪绘制，同周行按车道堆叠。
+  const spanModel = monthSpanBars(tasks, monthDays, todayKey);
+  const lanesByRow = new Array(6).fill(0);
+  for (const bar of spanModel.bars) {
+    lanesByRow[bar.row] = Math.max(lanesByRow[bar.row], bar.lane + 1);
+  }
+  const spanCountByDay = new Map();
+  const overflowCountByDay = new Map();
+  const countBarDays = (map, bar) => {
+    for (let index = bar.row * 7 + bar.startCol; index <= bar.row * 7 + bar.endCol; index += 1) {
+      const key = toDateKey(monthDays[index]);
+      map.set(key, (map.get(key) ?? 0) + 1);
+    }
+  };
+  for (const bar of spanModel.bars) countBarDays(spanCountByDay, bar);
+  for (const bar of spanModel.overflow) countBarDays(overflowCountByDay, bar);
+
+  const spanBarsHtml = spanModel.bars.map(monthSpanBar).join('');
+  const spanLayer = spanBarsHtml
+    ? `<div class="month-span-layer">${spanBarsHtml}</div>`
+    : '';
 
   const weekdayRow = WEEKDAY_LABELS.map(
     (label) => `<div class="month-weekday">周${label}</div>`
   ).join('');
 
   const cells = monthDays
-    .map((date) => {
+    .map((date, index) => {
       const key = toDateKey(date);
       const items = itemsByDate.get(key) ?? [];
+      const spanCount = spanCountByDay.get(key) ?? 0;
+      const overflowCount = overflowCountByDay.get(key) ?? 0;
       const inMonth = date.getMonth() === month;
       const classes = ['month-cell'];
       if (!inMonth) classes.push('is-outside');
       if (isSameDay(date, today)) classes.push('is-today');
 
       const visibleChips = items.slice(0, 2).map((item) => item.html).join('');
-      const hiddenCount = items.length - 2;
+      const hiddenCount = items.length - 2 + overflowCount;
       const more = hiddenCount > 0 ? `<span class="month-more">+${hiddenCount} 项</span>` : '';
-      const countLabel = items.length === 0 ? '无安排' : `${items.length} 项安排`;
+      const total = items.length + spanCount;
+      const countLabel = total === 0 ? '无安排' : `${total} 项安排`;
+      // 本周行有长条时，chip 统一下移让位（与长条层同一几何）。
+      const lanes = lanesByRow[Math.floor(index / 7)];
+      const laneStyle = lanes > 0 ? ` style="--month-span-lanes:${lanes}"` : '';
 
       return `<button
         type="button"
         class="${classes.join(' ')}"
         data-open-date="${key}"
+        ${laneStyle}
         aria-label="${date.getMonth() + 1}月${date.getDate()}日，${countLabel}，打开日视图"
         ${isSameDay(date, today) ? 'aria-current="date"' : ''}
       >
@@ -333,7 +419,7 @@ function renderMonth() {
   return `<div class="month-view">
     ${reviewHtml}
     <div class="month-weekdays">${weekdayRow}</div>
-    <div class="month-grid">${cells}</div>
+    <div class="month-grid">${cells}${spanLayer}</div>
   </div>`;
 }
 

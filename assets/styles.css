@@ -232,6 +232,11 @@ button {
   flex: 1;
   flex-direction: column;
   min-width: 0;
+  /* 跨天长条几何：与 .date-line(25) + .chips margin(4) 对齐；
+     900px 以下 .month-cell 上内边距变为 5px，见文末媒体查询。 */
+  --month-span-top: 35px;
+  --month-span-bar-height: 18px;
+  --month-span-pitch: 21px;
 }
 
 /* 逾期回顾横幅：截止已过且未删除的任务，保留供回顾（与周图回顾区同规则）。 */
@@ -369,11 +374,87 @@ button {
 }
 
 .month-grid {
+  position: relative;
   display: grid;
   flex: 1;
   min-height: 0;
   grid-template-columns: repeat(7, minmax(0, 1fr));
   grid-template-rows: repeat(6, minmax(0, 1fr));
+}
+
+/* 跨天长条层：与 .month-grid 同一几何的覆盖层。长条按周行 / 列区间摆放，
+   同一周行按车道堆叠；该周行的日格 chip 经 --month-span-lanes 统一下移让位。 */
+.month-span-layer {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  grid-template-rows: repeat(6, minmax(0, 1fr));
+  padding-top: var(--month-span-top);
+  pointer-events: none;
+}
+
+.month-span-bar {
+  display: flex;
+  align-self: start;
+  min-width: 0;
+  height: var(--month-span-bar-height);
+  margin-top: calc(var(--month-span-lane, 0) * var(--month-span-pitch));
+  margin-inline: 1px;
+  padding: 0 6px;
+  overflow: hidden;
+  border: 0;
+  border-left: 3px solid var(--chip-color);
+  border-radius: 6px;
+  background: var(--chip-bg);
+  color: var(--chip-text);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: calc(var(--month-span-bar-height) - 1px);
+  text-align: left;
+  white-space: nowrap;
+  pointer-events: auto;
+  cursor: pointer;
+  box-shadow: 0 1px 1px rgba(31, 35, 41, 0.05);
+  transition: filter 0.14s ease, box-shadow 0.14s ease;
+}
+
+.month-span-bar:hover {
+  filter: brightness(0.97);
+  box-shadow: 0 2px 6px rgba(31, 35, 41, 0.1);
+}
+
+.month-span-bar-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.month-span-bar.is-done {
+  opacity: 0.82;
+}
+
+.month-span-bar.is-done .month-span-bar-label {
+  text-decoration: line-through;
+}
+
+.month-span-bar.is-overdue {
+  --chip-color: #f54a45;
+  --chip-bg: #fff0ef;
+  --chip-text: #c9342f;
+}
+
+/* 探出本周行的长条：延续侧保持方角，读作「继续」。 */
+.month-span-bar.is-clipped-start {
+  border-radius: 0 6px 6px 0;
+}
+
+.month-span-bar.is-clipped-end {
+  border-radius: 6px 0 0 6px;
+}
+
+.month-span-bar.is-clipped-start.is-clipped-end {
+  border-radius: 0;
 }
 
 .month-cell {
@@ -446,7 +527,8 @@ button {
   flex-direction: column;
   gap: 3px;
   min-height: 0;
-  margin-top: 4px;
+  /* 本周行有跨天长条时整体下移让位（--month-span-lanes 由月视图写入）。 */
+  margin-top: calc(4px + var(--month-span-lanes, 0) * var(--month-span-pitch, 21px));
   overflow: hidden;
 }
 
@@ -1222,6 +1304,11 @@ button {
 
   .month-cell {
     padding: 5px 5px 3px;
+  }
+
+  /* 单元格上内边距随窄屏收窄，长条层顶部偏移同步减 1px。 */
+  .month-view {
+    --month-span-top: 34px;
   }
 
   .chip {
