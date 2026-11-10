@@ -1,6 +1,6 @@
 # 日程 · 接口说明
 
-版本：`0.6`（PR #3 主干基线 + 每日任务 + 清单 / 便签编辑 + 周图任务 × 时间方块 + 月 / 周 / 日任务统一 + 本地内容与添加接口 + 当日计划 / 收集区分区 + 逾期回顾区 + 全天任务）
+版本：`0.7`（PR #3 主干基线 + 每日任务 + 清单 / 便签编辑 + 周图任务 × 时间方块 + 月 / 周 / 日任务统一 + 本地内容与添加接口 + 当日计划 / 收集区分区 + 逾期回顾区 + 全天任务 + 蓄水池（attention-switch）多档选项池）
 适用范围：当前静态实现、后续模块与后端对接
 
 本文档说明「日程」当前**已经实现**的模块接口、数据契约与 DOM 契约，以及预留的扩展接口。接口变更必须同步修改本文档，并按 `AGENTS.md` 的规则评审。
@@ -17,11 +17,13 @@ src/modules/daily-tasks/
 src/modules/inbox/ 清单 / 便签编辑模块：store、面板渲染、时间表事件派生、样式
 src/modules/week-chart/
                    周视图任务 × 时间方块模块：纯几何、渲染、状态切换、测试
+src/modules/attention-switch/
+                   蓄水池模块：store、常驻面板 UI（三档选项 / 录入 / 从清单加入）、模块测试
 index.html         页面骨架、工具栏与模块样式入口
 assets/styles.css  全局与视图样式
 ```
 
-当前没有构建步骤和运行时依赖；`app.js` 是唯一入口，负责读取 URL、维护 `state`、渲染视图与处理交互。页面启动时先尝试读取可选的本地内容文件 `local/schedule.json`（不提交仓库），缺失时使用 `src/data.js` 的空白种子。日视图挂载 `daily-tasks` 与 `inbox` 模块，周视图挂载 `week-chart` 模块；三者分别通过 `services.dailyTasks` / `services.inbox` 共享状态。
+当前没有构建步骤和运行时依赖；`app.js` 是唯一入口，负责读取 URL、维护 `state`、渲染视图与处理交互。页面启动时先尝试读取可选的本地内容文件 `local/schedule.json`（不提交仓库），缺失时使用 `src/data.js` 的空白种子。日视图挂载 `daily-tasks` 与 `inbox` 模块，周视图挂载 `week-chart` 模块；三者分别通过 `services.dailyTasks` / `services.inbox` 共享状态。`attention-switch` 的根节点在页面骨架中常驻（`#view-root` 之外），只挂载一次，通过 `services.pool` 共享状态。
 
 ### 1.1 接口分层与兼容原则
 
@@ -53,6 +55,8 @@ assets/styles.css  全局与视图样式
 | `NoteTone` | `yellow` / `pink` / `blue` | 便签纸颜色 |
 | `TaskStatus` | `todo` / `partial` / `done` | 待完成 / 部分完成 / 完成 |
 | `DailyTaskRecurrence` | `daily` | 每日任务固定每天重复 |
+| `PoolSource` | `course` / `paper` / `web` / `work` / `chore` | 蓄水池条目来源：网课 / 论文 / 网页 / 工作 / 杂事 |
+| `PoolTier` | `leisure` / `browse` / `deep` | 蓄水池三档学习状态：娱乐性学习 / 简单看过 / 理解学习 |
 
 ### 2.2 数据结构
 
@@ -100,6 +104,18 @@ interface DailyTask {
 }
 // 每日任务是重复定义，不进入时间表；完成状态按日期单独记录：
 // statuses[YYYY-MM-DD][taskId] = TaskStatus，缺省 todo。
+
+interface PoolItem {
+  id: string;                 // 集合内唯一
+  title: string;              // 纯文本，1–80 字符
+  url?: string;               // http(s) 链接；省略时条目只有详情，点击展开而非打开
+  source: PoolSource;         // 来源；网课最多
+  tiers: PoolTier[];          // 非空、去重；一条目可属多档
+  note?: string;              // 纯文本，最多 200 字符
+  createdAt: string;          // YYYY-MM-DD
+}
+// 蓄水池（attention-switch 模块）是独立实体，与 Task / DailyTask 并列：
+// 不绑定日期、不进时间表 / 周图 / 月视图，也不与清单任务同步状态。
 ```
 
 新增任务时 `status = todo`，`icon` 缺省为 `📝`；时间字段可同时缺省；只要填写其一，就必须同时填写 `start` 和 `duration`，并带合法 `date`；`due` 可独立缺省，填写时必须是合法日期。新增便签时 `tone` 按当天已有便签数量在 `yellow → pink → blue` 间轮换，`tilt` 同步轮换。
@@ -127,6 +143,8 @@ interface DailyTask {
 - 清空 `start` / `duration` 而保留 `date` = 变为当天全天任务；显式传 `date: ''` = 回到收集区（未排期）。
 - `DailyTask.recurrence` 固定为 `daily`；定义没有日期字段，日期只用于读取/写入当天的完成状态；跨天默认回到 `todo`。
 - 每日任务只在日视图展示和手工添加；月 / 周视图不展示每日任务条。清单任务按日期进入月 / 周视图，两者共用同一份 store。
+- `PoolItem.tiers` 非空且只含已知档位（写入时抛 `POOL_TIER_INVALID`）；`url` 必须是 `http(s)://` 开头（`POOL_URL_INVALID`）；`createdAt` 必须是真实日期键，缺省取当天。
+- 蓄水池条目的增改删只存当前页面会话；刷新后回到 `local/schedule.json` 的 `pool` 初值；「从清单加入」是单向快照，之后池与清单互不影响。
 - 清单 / 便签的新增、修改、删除只保存在当前页面会话（内存 store）；刷新后回到本地内容文件 / 空白种子的初始状态。
 
 ### 2.4 示例数据
@@ -244,6 +262,20 @@ store 方法：
 
 `left` / `width` 是整周轨道的 0–1 比例；`days[].isToday` 标记今天；任务行的 `status` / `overdue` 供 UI 使用。周图只读 `services.inbox` 的任务与 `context.data.events`，不维护第二份任务数据。
 
+### 3.6 `src/modules/attention-switch/store.js`
+
+蓄水池的纯逻辑 store（无 DOM）。模块入口 `index.js` 重新导出以下函数，宿主与测试都从模块入口导入。
+
+| 导出 | 说明 |
+| --- | --- |
+| `POOL_SOURCES` / `POOL_TIERS` | `course\|paper\|web\|work\|chore` / `leisure\|browse\|deep` |
+| `POOL_SOURCE_LABELS` / `POOL_TIER_LABELS` | 中文展示名（网课 / 论文 / 网页 / 工作 / 杂事；娱乐性学习 / 简单看过 / 理解学习） |
+| `POOL_TITLE_MAX_LENGTH` / `POOL_NOTE_MAX_LENGTH` / `POOL_DEFAULT_OPTION_COUNT` | 80 / 200 / 5 |
+| `normalizePoolItem(input, options?)` | 校验并规范化；非法时抛带 `code` 的 `Error`（`options.createId` / `options.now` 供测试注入） |
+| `createPoolStore(seedItems, options?)` | 创建 store；种子中的坏条目跳过不抛错 |
+
+store 方法：`addItem` / `updateItem` / `deleteItem` / `listItems` / `listByTier(tier)` / `optionsFor(tier, count?)` / `markUsed(id)` / `subscribe(listener)`。`optionsFor` 的排序为会话内未取用过优先、同级按加入时间倒序（暂定规则，留空间供后续调整）。`markUsed` 只写会话内标记、不产生历史。错误码：`POOL_TITLE_INVALID` / `POOL_URL_INVALID` / `POOL_SOURCE_INVALID` / `POOL_TIER_INVALID` / `POOL_NOTE_INVALID` / `POOL_DUPLICATE_ID` / `POOL_NOT_FOUND`。
+
 ## 4. 页面与 DOM 契约
 
 ### 4.1 URL
@@ -299,6 +331,16 @@ store 方法：
 | `[data-review-group="overdue" \| "completed"]` | 回顾区内的「逾期未完成 / 已完成」分组（周图与月视图通用） |
 | `[data-week-chart-progress]` | 本周 `done / total 完成` 文本（只统计本周可见行，不含回顾区） |
 | `[data-week-chart-live]` | 周图状态播报区域 |
+| `[data-pool-toggle]` | 顶栏常驻「蓄水池」入口按钮；`aria-expanded` 表示面板开合 |
+| `[data-module-root="attention-switch"]` | 蓄水池面板根（页面级、常驻＋ `hidden` 控制可见性） |
+| `[data-attention-switch-tier]` | 三档学习状态切换（值为 `leisure\|browse\|deep`），`aria-pressed` 表示当前档 |
+| `[data-attention-switch-option="<id>"]` | 选项行 |
+| `[data-attention-switch-open="<id>"]` | 选项主按钮；有链接新标签页打开，无链接展开详情 |
+| `[data-attention-switch-edit="<id>"]` / `[data-attention-switch-delete="<id>"]` | 编辑 / 两步删除（删除确认时 `data-armed="true"`） |
+| `[data-attention-switch-add-toggle]` / `[data-attention-switch-import-toggle]` | 「录入」/ 「从清单加入」开关 |
+| `[data-attention-switch-form]` / `[data-attention-switch-input]` | 录入 / 编辑表单与其字段（`title` / `url` / `source` / `tier` / `note`） |
+| `[data-attention-switch-import-row]` / `[data-attention-switch-import-pick="<id>"]` | 从清单加入的任务行与入池按钮 |
+| `[data-attention-switch-live]` | 蓄水池面板的 `aria-live="polite"` 播报区域 |
 | `[data-month-review]` | 月视图逾期回顾横幅（主干渲染，可用 `[data-task-toggle]` 切换状态） |
 | `[data-review-item="<id>"]` | 月视图回顾横幅内的任务胶囊 |
 
@@ -336,6 +378,16 @@ store 方法：
 - 时间表事件由 `services.inbox.listCalendarEvents(date)` 派生，主干 store 订阅后局部刷新周条与时间表，不重挂侧栏；重叠事件按 `layoutOverlaps` 分列显示。
 - 截止日期通过种子数据或 `services.inbox.addTask / updateTask` 的 `due` 写入并在行内展示；当前新增 / 编辑表单不提供日期输入，也不支持在 UI 内修改或清除已有截止日期（写入时校验 `due ≥ date`）。
 - **逾期回顾区**：周视图图表上方与月视图网格上方横幅展示截止已过的任务（`[data-review-group]` 分「逾期未完成 / 已完成」），可点 `[data-task-toggle]` 切换状态、点标题跳到截止日；保留至删除，不计入周 / 日进度。
+
+### 4.6 蓄水池 UI 契约
+
+- 入口常驻顶栏（任何视图可用）；面板为模态层，`role="dialog"`。
+- 点入口开面板；关闭按钮 / 背景 / `Escape` 关面板，焦点回入口按钮。`Escape` 依次收起表单 / 导入列表 / 面板。
+- 三档切换显示该档选项（缺省 5 个）；有链接的选项点击新标签页打开并标记取用（排序置后）；无链接的展开详情。
+- 三种录入形式：面板表单、`window.schedule.pool.add`、本地内容文件的 `pool` 键；修改 / 删除只存当前会话，刷新回本地初值。
+- 「从清单加入」只读 `services.inbox` 的任务列表；单向联动，池内容不回写清单。
+- 面板打开时，方向键 / `T` / `M` / `W` / `D` 不驱动日历导航。
+- 校验失败时表单保持打开，错误信息 `role="alert"`，标题框获焦点。
 
 ## 5. 扩展接口
 
@@ -380,6 +432,7 @@ interface ScheduleModule<Data, Services> {
 | `daily-tasks` | 日视图 `<div data-module-root="daily-tasks"></div>` | `services.dailyTasks` | `data.dailyTasks` | `daily-tasks/styles.css` |
 | `inbox` | 日视图 `<aside class="day-sidebar" data-module-root="inbox"></aside>` | `services.inbox` | `data.notes` / `data.tasks` | `inbox/styles.css` |
 | `week-chart` | 周视图 `<div class="mod-week-chart-root" data-module-root="week-chart"></div>` | `services.inbox` | `data.events` / `data.tasks` | `week-chart/styles.css` |
+| `attention-switch` | 页面级 `<div id="pool-panel" data-module-root="attention-switch" hidden></div>`（常驻，只挂载一次） | `services.pool`（只读 `services.inbox`） | `data.pool` | `attention-switch/styles.css` |
 
 `InboxService`（`services.inbox`，与 3.3 方法一致）：
 
@@ -414,6 +467,21 @@ interface DailyTasksService {
   setStatus(taskId: string, date: string, status: TaskStatus): TaskStatus;
   toggleStatus(taskId: string, date: string): TaskStatus;
   statusCounts(date: string): { total: number; todo: number; partial: number; done: number; percent: number };
+  subscribe(listener: (change: object) => void): () => void;
+}
+```
+
+`PoolService`（`services.pool`，与 3.6 方法一致）：
+
+```ts
+interface PoolService {
+  addItem(input: { id?: string; title: string; url?: string; source: PoolSource; tiers: PoolTier[]; note?: string }): PoolItem;
+  updateItem(id: string, changes: { title?: string; url?: string; source?: PoolSource; tiers?: PoolTier[]; note?: string }): PoolItem;
+  deleteItem(id: string): PoolItem;
+  listItems(): PoolItem[];
+  listByTier(tier: PoolTier): PoolItem[];
+  optionsFor(tier: PoolTier, count?: number): PoolItem[];
+  markUsed(id: string): void;
   subscribe(listener: (change: object) => void): () => void;
 }
 ```
@@ -488,7 +556,7 @@ interface CalendarDataSource {
 
 ### 5.3 dsh 输入接口
 
-`app.js` 暴露只读命名空间 `window.schedule`（`version: '0.6'`），包含任务与每日任务两个运行时接口：
+`app.js` 暴露只读命名空间 `window.schedule`（`version: '0.7'`），包含任务、每日任务与蓄水池三个运行时接口：
 
 ```js
 // 任务：清单 / 日 / 周 / 月共用
@@ -519,6 +587,18 @@ window.schedule.dailyTasks.list('2026-11-06');
 window.schedule.dailyTasks.toggle('daily-01', '2026-11-06');
 window.schedule.dailyTasks.setStatus('daily-01', 'done', '2026-11-06');
 window.schedule.dailyTasks.getStatus('daily-01', '2026-11-06');
+
+// 蓄水池：当前页面会话内
+window.schedule.pool.add({
+  title: '线性代数网课',
+  url: 'https://www.bilibili.com/video/BV1xx',
+  source: 'course',                 // course | paper | web | work | chore
+  tiers: ['deep', 'leisure'],       // 至少一个；leisure | browse | deep
+  note: '看到第 3 讲',               // 可选
+});
+window.schedule.pool.list();
+// [{ id, title, url, source, tiers, note, createdAt }, ...]
+window.schedule.pool.remove('pool-01');
 ```
 
 - `tasks.*` 等价于 `services.inbox` 的对应方法；`dailyTasks.*` 等价于 `services.dailyTasks` 的对应方法；返回值都是数据副本。
@@ -529,7 +609,7 @@ window.schedule.dailyTasks.getStatus('daily-01', '2026-11-06');
 
 ## 6. 版本与兼容
 
-- 当前接口版本 `0.6`；0.2 增量加入 `DailyTask`、`DailyTasksService`、`window.schedule.dailyTasks` 与每日任务 DOM；0.3 增量加入清单 / 便签 CRUD、任务可选时间字段与日视图时间表派生事件；0.4 增量加入任务可选 `due` 截止日期与行内展示；0.5 增量加入周图模块、月 / 周 / 日任务统一、任务可选 `id`、`window.schedule.tasks`、本地内容文件与机制层交接约定；0.6 增量加入「当日计划 / 收集区」分区与日进度口径、周 / 月逾期回顾区、全天任务（`date` 不带时间）、`due ≥ date` 写入校验、共享任务日期映射（`taskWindow` / `taskDayEntry` / `taskReviewGroups`）与 `listUnscheduledTasks()`。已发布字段与稳定选择器保持不变。
+- 当前接口版本 `0.7`；0.2 增量加入 `DailyTask`、`DailyTasksService`、`window.schedule.dailyTasks` 与每日任务 DOM；0.3 增量加入清单 / 便签 CRUD、任务可选时间字段与日视图时间表派生事件；0.4 增量加入任务可选 `due` 截止日期与行内展示；0.5 增量加入周图模块、月 / 周 / 日任务统一、任务可选 `id`、`window.schedule.tasks`、本地内容文件与机制层交接约定；0.6 增量加入「当日计划 / 收集区」分区与日进度口径、周 / 月逾期回顾区、全天任务（`date` 不带时间）、`due ≥ date` 写入校验、共享任务日期映射（`taskWindow` / `taskDayEntry` / `taskReviewGroups`）与 `listUnscheduledTasks()`；0.7 增量加入蓄水池（`PoolItem` / `PoolService` / `window.schedule.pool`、顶栏常驻入口与面板选择器、本地内容可选 `pool` 键）。已发布字段与稳定选择器保持不变。
 - 0.6 的行为变化（需在 PR / 迁移说明中告知）：① 日视图「清单」不再展示全部任务，只展示当日计划 + 收集区；② `updateTask` 清空 `start` / `duration` 从「解绑日期」变为「变为全天任务」，解绑需显式 `date: ''`；③ `addTask({ date })` 不再静默忽略日期，而是创建全天任务；④ `due` 早于 `date` 的写入抛 `INBOX_TASK_DUE_INVALID`。
 - 新增字段必须可选，渲染层对未知可选字段保持忽略。
 - 颜色 / 图标 / 状态枚举新增时，需要同时补样式与回退；删除或重命名属于 breaking change。

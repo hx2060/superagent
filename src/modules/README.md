@@ -15,6 +15,7 @@ src/modules/<name>/
 - `daily-tasks/`：每日重复任务。日视图通过 `[data-module-root="daily-tasks"]` 注册点挂载，共享状态走 `services.dailyTasks`；样式在 `index.html` 中以单独 `<link>` 加载。
 - `inbox/`：日视图「清单」与「便签」的新增 / 修改 / 删除；清单任务可选开始时间与持续分钟，并同步到日视图时间表、周图与月视图；也可带可选截止日期并在行内展示。注册点为 `<aside class="day-sidebar" data-module-root="inbox">`，共享状态走 `services.inbox`，模块样式在 `index.html` 中以单独 `<link>` 加载。
 - `week-chart/`：周视图任务 × 时间方块图。注册点为 `<div class="mod-week-chart-root" data-module-root="week-chart">`，通过 `services.inbox` 读取同一份任务并切换状态；几何与行模型在 `chart.js`。
+- `attention-switch/`：空白 / 瓶颈时刻的「蓄水池」。顶栏常驻入口（`data-pool-toggle`）+ 页面级面板根（`#view-root` 之外，只挂载一次）；三档学习状态（娱乐性学习 / 简单看过 / 理解学习）各给几个选项，收录支持模块表单 / `window.schedule.pool` / 本地 `pool` 键三种形式，并可单向「从清单加入」；共享状态走 `services.pool`，样式在 `index.html` 中以单独 `<link>` 加载。
 
 ## 模块入口模板
 

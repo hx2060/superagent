@@ -22,6 +22,15 @@ export const sampleTasks = [];
  */
 export const sampleDailyTasks = [];
 
+/**
+ * Attention-switch pool (蓄水池) seed: an option reservoir of courses, papers,
+ * web reads, work tasks and chores, each tagged with the learning states it can
+ * serve. Kept empty for a blank start; content is supplied by the local content
+ * file or the runtime `window.schedule.pool` interface. See
+ * src/modules/attention-switch/README.md.
+ */
+export const samplePool = [];
+
 /** URL of the optional, git-ignored local content file. */
 export const LOCAL_DATA_URL = new URL('../local/schedule.json', import.meta.url);
 
@@ -31,7 +40,7 @@ export const LOCAL_DATA_URL = new URL('../local/schedule.json', import.meta.url)
  * local file cannot break the app.
  *
  * @param {unknown} local parsed JSON from the local content file
- * @param {{ events?: object[], notes?: object[], tasks?: object[], dailyTasks?: object[] }} [fallback]
+ * @param {{ events?: object[], notes?: object[], tasks?: object[], dailyTasks?: object[], pool?: object[] }} [fallback]
  */
 export function pickSeedData(local, fallback = {}) {
   const source = local && typeof local === 'object' && !Array.isArray(local) ? local : {};
@@ -42,6 +51,7 @@ export function pickSeedData(local, fallback = {}) {
     notes: pick('notes'),
     tasks: pick('tasks'),
     dailyTasks: pick('dailyTasks'),
+    pool: pick('pool'),
   };
 }
 

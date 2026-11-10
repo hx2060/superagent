@@ -1,6 +1,6 @@
 # 日程添加接口文档
 
-版本：`0.6`
+版本：`0.7`
 配套文档：`docs/interfaces.md`（稳定契约）、`docs/integration.md`（对接）、`docs/mechanism-handoff.md`（机制层 / 本地内容边界）
 
 本文档面向**机器人 / 自动化**：说明如何把一条日程添加进「日程」，以及添加后如何出现在清单、日视图、周图和月视图。具体任务内容属于本地内容层，**不要提交到 GitHub**。
@@ -10,7 +10,7 @@
 | 通道 | 入口 | 作用域 | 适用场景 |
 | --- | --- | --- | --- |
 | 页面手工 | 日视图「清单」→ `＋` → 填写标题 / 开始 / 持续 | 当前页面会话 | 使用者手工补一条 |
-| 运行时 API | `window.schedule.tasks.*` / `window.schedule.dailyTasks.*` | 当前页面会话 | 机器人 / 自动化在已打开的页面里添加、改状态、删除 |
+| 运行时 API | `window.schedule.tasks.*` / `window.schedule.dailyTasks.*` / `window.schedule.pool.*` | 当前页面会话 | 机器人 / 自动化在已打开的页面里添加、改状态、删除 |
 | 本地内容文件 | `local/schedule.json`，页面加载时读取 | 持久（刷新后仍在） | 机器人把具体安排写成本地内容，不提交 GitHub |
 
 推荐流程：**机制与接口在 GitHub；具体内容写 `local/schedule.json`；刷新页面验证。** 运行时 API 适合临时操作或页面内自动化；它不会写回本地文件。
@@ -53,6 +53,16 @@ interface CalendarEvent {
 interface StickyNote {
   id: string; date: string; text: string;
   tone: 'yellow' | 'pink' | 'blue'; tilt?: number;
+}
+
+interface PoolItem {
+  id: string;                 // 集合内唯一；本地文件建议必填，运行时 API 可省略（自动生成）
+  title: string;              // 1–80 字符，纯文本
+  url?: string;               // http(s) 链接；省略时条目只有详情
+  source: 'course' | 'paper' | 'web' | 'work' | 'chore';   // 来源
+  tiers: Array<'leisure' | 'browse' | 'deep'>;             // 至少一档，可多档
+  note?: string;              // 最多 200 字符，纯文本
+  createdAt?: string;         // YYYY-MM-DD；缺省取当天
 }
 
 interface DailyTask {
@@ -136,7 +146,25 @@ window.schedule.dailyTasks.getStatus('daily-water', '2026-11-08');
 
 重复执行同一添加前，先用 `window.schedule.tasks.get(id)` 检查，或用 `update(id, ...)` 更新；`add` 的重复 id 会抛错。
 
-### 3.3 错误约定
+### 3.3 `window.schedule.pool`（蓄水池）
+
+蓄水池条目（网课 / 论文 / 网页 / 工作 / 杂事），按三档学习状态归档；只存当前页面会话，持久请写本地内容文件的 `pool` 键。
+
+```js
+window.schedule.pool.add({
+  title: '线性代数网课',
+  url: 'https://www.bilibili.com/video/BV1xx',
+  source: 'course',                 // course | paper | web | work | chore
+  tiers: ['deep', 'leisure'],       // 至少一档；leisure | browse | deep
+  note: '看到第 3 讲',
+});
+window.schedule.pool.list();        // [{ id, title, url, source, tiers, note, createdAt }]
+window.schedule.pool.remove('pool-01');
+```
+
+`add` 的重复 `id` 会抛错；不传 `id` 时自动生成。无 `update` 运行时方法；修改请用面板内编辑。
+
+### 3.4 错误约定
 
 运行时方法在非法输入时同步抛出带 `code` 的 `Error`：
 
@@ -149,6 +177,7 @@ window.schedule.dailyTasks.getStatus('daily-water', '2026-11-08');
 | `INBOX_TASK_NOT_FOUND` | 更新 / 删除 / 读写状态时 id 不存在 |
 | `INBOX_TASK_STATUS_INVALID` | 状态不是 `todo / partial / done` |
 | `DAILY_TASK_INVALID` / `DAILY_TASK_DUPLICATE_ID` / `DAILY_TASK_NOT_FOUND` / `DAILY_TASK_STATUS_INVALID` / `DAILY_TASK_DATE_INVALID` | 每日任务对应错误 |
+| `POOL_TITLE_INVALID` / `POOL_URL_INVALID` / `POOL_SOURCE_INVALID` / `POOL_TIER_INVALID` / `POOL_NOTE_INVALID` / `POOL_DUPLICATE_ID` / `POOL_NOT_FOUND` | 蓄水池条目对应错误（标题 / 链接 / 来源 / 档位 / 备注 / 重复 id / id 不存在） |
 
 ## 4. 本地内容文件（持久）
 
@@ -163,9 +192,12 @@ window.schedule.dailyTasks.getStatus('daily-water', '2026-11-08');
   "events": [],
   "notes": [],
   "tasks": [],
-  "dailyTasks": []
+  "dailyTasks": [],
+  "pool": []
 }
 ```
+
+`pool` 为可选键；每条需要 `title` / `source` / `tiers`，`url` / `note` 可省，`id` 建议提供。坏条目跳过不阻塞启动。
 
 带内容示例（使用中性占位，实际内容按需替换）：
 
@@ -227,6 +259,7 @@ window.schedule.dailyTasks.getStatus('daily-water', '2026-11-08');
 | 定时 + 截止（`due` 晚于 `date`） | 排期日与截止日的当日计划行 + 截止标签（未完成时区间内每天出现） | 从 `date` 跨到 `due` 的方块 | `date` chip + `due` 截止 chip |
 | 未排期（无 `date` / `due`） | 「收集区」行（不计入日进度） | 不显示 | 不显示 |
 | 每日任务（`dailyTasks`） | 顶部每日任务条 | 不显示 | 不显示 |
+| 蓄水池条目（`pool`） | 不进入日视图；顶栏常驻「蓄水池」入口，点击进面板 | 不显示 | 不显示 |
 
 - **当日计划** = 截止日 / 排期日是当天，或未完成且当天在任务占据区间内；**日进度**只统计当日计划成员。
 - **逾期回顾区**：截止已过且未删除的任务，在周视图图表上方与月视图网格上方按「逾期未完成 / 已完成」分组展示，保留至删除，可切换状态。
@@ -258,7 +291,7 @@ $EDITOR local/schedule.json
 
 ## 7. 版本与兼容
 
-- 当前接口版本 `0.6`；本版本新增：全天任务（只传 `date`）、当日计划 / 收集区分区与日进度口径、周 / 月逾期回顾区、`due` 不得早于 `date` 的写入校验；`updateTask` 清空时间从「解绑日期」改为「变为全天任务」（解绑需显式 `date: ''`）。
+- 当剂接口版本 `0.7`；本版本新增：蓄水池（`window.schedule.pool.add / list / remove`、本地内容可选 `pool` 键、三档学习状态与多档归档）；上一版本新增：全天任务（只传 `date`）、当日计划 / 收集区分区与日进度口径、周 / 月逾期回顾区、`due` 不得早于 `date` 的写入校验；`updateTask` 清空时间从「解绑日期」改为「变为全天任务」（解绑需显式 `date: ''`）。
 - 新增字段保持可选；已发布字段与方法不删除、不改语义。
 - 破坏性变更需升级版本，并同步 `docs/interfaces.md` 与 `docs/integration.md`。
 - 本文件的示例内容均为中性占位；真实任务 / 时间 / 便签不写入仓库。

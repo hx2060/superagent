@@ -9,19 +9,21 @@ test('本地内容：缺失或非法集合按 key 回退到默认种子', () => 
     notes: [{ id: 'n-fallback' }],
     tasks: [{ id: 't-fallback' }],
     dailyTasks: [{ id: 'd-fallback' }],
+    pool: [{ id: 'p-fallback' }],
   };
 
   assert.deepEqual(pickSeedData(null, fallback), fallback);
   assert.deepEqual(pickSeedData([], fallback), fallback);
 
   const partial = pickSeedData(
-    { tasks: [{ id: 't-local' }], events: null, notes: 'broken' },
+    { tasks: [{ id: 't-local' }], events: null, notes: 'broken', pool: 'broken' },
     fallback
   );
   assert.deepEqual(partial.tasks, [{ id: 't-local' }]);
   assert.deepEqual(partial.events, fallback.events);
   assert.deepEqual(partial.notes, fallback.notes);
   assert.deepEqual(partial.dailyTasks, fallback.dailyTasks);
+  assert.deepEqual(partial.pool, fallback.pool);
 });
 
 test('本地内容：空数组表示有意为空，不回退', () => {

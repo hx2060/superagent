@@ -26,12 +26,14 @@ import {
   sampleDailyTasks,
   sampleEvents,
   sampleNotes,
+  samplePool,
   sampleTasks,
 } from './data.js';
 import { TASK_STATUS_LABELS, taskMonthAnchors, taskReviewGroups } from './tasks.js';
 import { createDailyTaskStore, mount as mountDailyTasks } from './modules/daily-tasks/index.js';
 import { createInboxStore, mount as mountInbox } from './modules/inbox/index.js';
 import { mount as mountWeekChart } from './modules/week-chart/index.js';
+import { createPoolStore, mount as mountAttentionSwitch } from './modules/attention-switch/index.js';
 
 const VIEWS = new Set(['month', 'week', 'day']);
 const TASK_STATUS_COLORS = { todo: 'blue', partial: 'orange', done: 'teal' };
@@ -55,11 +57,13 @@ const seed = pickSeedData(localData, {
   notes: sampleNotes,
   tasks: sampleTasks,
   dailyTasks: sampleDailyTasks,
+  pool: samplePool,
 });
 const events = seed.events;
 
 const inbox = createInboxStore({ tasks: seed.tasks, notes: seed.notes });
 const dailyTasks = createDailyTaskStore(seed.dailyTasks);
+const pool = createPoolStore(seed.pool);
 let inboxView = null;
 let dailyTasksView = null;
 let weekChartView = null;
@@ -155,10 +159,25 @@ const tasksApi = Object.freeze({
   },
 });
 
+// Attention-switch pool (蓄水池): the option reservoir the panel reads and
+// writes; dsh feeds it through window.schedule.pool below.
+const poolApi = Object.freeze({
+  add(input) {
+    return pool.addItem(input);
+  },
+  list() {
+    return pool.listItems();
+  },
+  remove(id) {
+    return pool.deleteItem(id);
+  },
+});
+
 window.schedule = Object.freeze({
-  version: '0.6',
+  version: '0.7',
   tasks: tasksApi,
   dailyTasks: dailyTasksApi,
+  pool: poolApi,
 });
 
 function periodLabel() {
@@ -606,6 +625,9 @@ document.addEventListener('click', (event) => {
 });
 
 document.addEventListener('keydown', (event) => {
+  // While the 蓄水池 panel is open the keyboard belongs to it (tabs, form,
+  // Escape); calendar navigation stays paused.
+  if (poolRoot && !poolRoot.hidden) return;
   if (event.target instanceof HTMLElement && event.target.matches('input, textarea, [contenteditable="true"]')) return;
   if (event.metaKey || event.ctrlKey || event.altKey) return;
 
@@ -622,3 +644,31 @@ document.addEventListener('keydown', (event) => {
 
 readInitialState();
 render();
+
+// 蓄水池（attention-switch）：常驻入口 + 页面级面板根。模块只挂载一次——
+// 面板根在 #view-root 之外，视图切换不影响它；可见性由入口按钮与模块冒泡上来的
+// attention-switch:close 事件共同控制。模块契约与生命周期见模块 README。
+const poolRoot = document.querySelector('[data-module-root="attention-switch"]');
+const poolToggle = document.querySelector('[data-pool-toggle]');
+
+if (poolRoot && poolToggle) {
+  mountAttentionSwitch({
+    root: poolRoot,
+    state: { view: state.view, anchor: new Date(state.anchor) },
+    data: { pool: pool.listItems() },
+    services: { pool, inbox },
+  });
+
+  function setPoolOpen(open) {
+    poolRoot.hidden = !open;
+    poolToggle.setAttribute('aria-expanded', String(open));
+    if (open) {
+      poolRoot.dispatchEvent(new CustomEvent('attention-switch:opened'));
+    } else {
+      poolToggle.focus();
+    }
+  }
+
+  poolToggle.addEventListener('click', () => setPoolOpen(poolRoot.hidden));
+  poolRoot.addEventListener('attention-switch:close', () => setPoolOpen(false));
+}
