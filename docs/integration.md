@@ -372,3 +372,14 @@ exampleView = mountExample({
 - [ ] UI 改动在本地完成 Baseline / After 对比，证据留在 `local/evidence/`；PR 用文字说明，不贴图。
 - [ ] 未提交设计备选、临时预览或敏感信息。
 - [ ] PR 明确关联 Issue；跟踪 Issue 默认保持开启。
+
+## 7. 本地预览自动同步（机制层，可选运维）
+
+- 问题：本地端口预览直接读 `scripts/serve.mjs` 所在工作树；PR 合并进 `main` 后，
+  工作树不自动前进，页面刷新仍是旧骨架。
+- 方案：`scripts/auto-sync.mjs` 执行 `git fetch` + 比对 `HEAD` 与 `origin/main`，
+  工作树干净且落后时 `git reset --hard`；有未提交改动则跳过并在日志中告警。
+  `local/` 未跟踪内容不受影响。
+- 部署（本机运维，不入仓库）：cron 每分钟运行一次，日志写入 `local/auto-sync.log`：
+  `cd <预览工作树> && [ "$(git branch --show-current)" = "workspace/schedule" ] && node scripts/auto-sync.mjs >> local/auto-sync.log 2>&1`
+- 服务按请求实时读盘且 `Cache-Control: no-store`，同步后刷新页面即可，无需重启。
