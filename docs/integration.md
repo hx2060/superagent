@@ -265,7 +265,29 @@ src/modules/inbox/
 
 任务时间同步：没有日期与截止的任务留在「收集区」（不计入日进度）；填写 `start` + `duration` 后绑定日期，`listCalendarEvents(date)` 派生 teal 时间表事件，进入当日计划、周图与月视图；只填 `date` 为全天任务（不进时间表）；只填 `due` 的任务在截止前进入当日计划、截止日进周 / 月视图，截止后进逾期回顾区。删除为两步确认，刷新后回到本地内容 / 空白初始状态。
 
-### 3.6 新模块接入演练（示例）
+### 3.6 已落地示例：`attention-switch`（蓄水池）
+
+```
+src/modules/attention-switch/
+  index.js        mount(context)：顶栏常驻入口 + 蓄水池面板（三档选项 / 收录 / 从清单加入）
+  store.js        纯逻辑：PoolItem 校验、分档、选取、会话内取用标记
+  styles.css      .mod-attention-switch-* 样式，index.html 中一行 <link> 加载
+  __tests__/      node:test
+  README.md       接口、不变量、三种收录形式、注册点
+```
+
+与日视图模块的区别：面板根节点在页面骨架中常驻（`#view-root` 之外），`app.js` 只挂载一次；可见性由入口按钮与模块派发的 `attention-switch:close` 事件共同控制。
+
+主干接入点：
+
+- `src/app.js`：引入模块、`createPoolStore(seed.pool)`、传入 `services.pool`（模块只读 `services.inbox`）、入口点击 / 关闭事件控制可见性、面板打开时屏蔽日历方向键、`window.schedule.pool`。
+- `index.html`：顶栏 `.topbar-right` 包裹视图切换 + `<button data-pool-toggle>`；`#view-root` 之后一行 `<div data-module-root="attention-switch" hidden>`；一行模块样式 `<link>`。
+- `src/data.js`：`samplePool`（空数组）+ `pickSeedData` 可选 `pool` 键。
+- `assets/styles.css`：`.topbar-right` / `.pool-entry` 两条顶栏样式。
+
+录入三种形式：面板表单、`window.schedule.pool.add`（会话内）、`local/schedule.json` 的 `pool` 键（刷新后仍在）。刷新后回到本地文件 / 空白初值，与其它模块一致。
+
+### 3.7 新模块接入演练（示例）
 
 以一个假设的 `example` 模块为例，完整接入路径如下，确认后续模块不需要改其它模块的内部实现。
 

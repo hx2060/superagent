@@ -123,6 +123,38 @@ button {
   box-shadow: 0 1px 3px rgba(31, 35, 41, 0.12);
 }
 
+/* Top-right cluster: view switch plus the persistent 蓄水池 entry
+   (attention-switch module; the panel itself lives in the module styles). */
+.topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.pool-entry {
+  padding: 7px 15px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--text-2);
+  font-size: 13px;
+  line-height: 20px;
+  cursor: pointer;
+  transition: border-color 0.16s ease, color 0.16s ease, background 0.16s ease;
+}
+
+.pool-entry:hover {
+  border-color: #c7d5ff;
+  color: var(--accent-strong);
+}
+
+.pool-entry[aria-expanded="true"] {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  font-weight: 600;
+}
+
 .toolbar {
   display: flex;
   align-items: center;
