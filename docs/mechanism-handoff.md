@@ -69,6 +69,22 @@ local/
 - `scripts/serve.mjs --content <目录>` 把 `/local/*` 改由该目录提供；点号路径（`.git` 等）一律拒绝，测试实例不会暴露真实本地内容。
 - 部署机上的端口映射由反代配置完成（内网限制），本地走既有常驻端口、测试单独一个端口。
 
+### 6.1 部署机入口与「新版本预览在 8081」规则
+
+| 入口 | 反代到 | 用途 | 代码来源 |
+| --- | --- | --- | --- |
+| `8081` | `127.0.0.1:4175`（systemd `schedule-test-8081`） | **测试实例**：实时预览当前工单分支的新版本 | 测试实例工作树（跟随 `.sync-ref` 指定的分支） |
+| `8082` | `/var/www/schedule`（Caddy `file_server`） | 常驻站：已合并进 `main` 的稳定版本 | 由 `schedule-preview-sync` 从本地实例工作树镜像（`index.html` / `assets/` / `src/` + `local/schedule.json`） |
+| `8080` | `127.0.0.1:4176`（systemd `schedule-preview-live`） | 本地实时预览：真实本地内容，支持任务写回 | 本地实例工作树 + `local/schedule.json` |
+
+规则（需求方确认，`AGENTS.md` 第 6 节同款）：
+
+1. **新版本预览在 8081**：每次把改动推送到当前工单分支后，8081 在约 1 分钟内自动同步该分支，改动先在 8081 检查；未合并的组件不直接进 `8082`。
+2. `8082` 只跟随已合并进 `main` 的版本（本地实例工作树的 auto-sync + `schedule-preview-sync` 镜像）。
+3. **换分支**：8081 跟随的分支写在测试实例工作树的 `.sync-ref`（一行分支名，缺省 `main`）；改这一行即可，约 1 分钟生效。
+4. 同步实现：`/home/ubuntu/schedule-deploy/sync-test-8081.mjs`，由 ubuntu 用户 crontab 每分钟执行——优先 `git fetch` 远端 GitHub（推送目标），外网不可达时回退本地工单目录，且要求「只向前」（候选尖端必须是当前 HEAD 的后裔），避免工单目录里过期的分支引用把实例带偏；每次 git 调用有 45s 超时，外网挂起不会拖住 cron。有差异即 `reset --hard`，日志写测试实例目录下的 `sync.log`。
+5. 三个入口都返回 `Cache-Control: no-store`（Caddy `file_server` 默认不发缓存头，浏览器会按启发式规则缓存旧文件），刷新即可拿到最新代码。
+
 ## 7. 两份交接文档
 
 | 文档 | 位置 | 内容 |
