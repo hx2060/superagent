@@ -340,7 +340,6 @@ function monthSpanBar(bar) {
     type="button"
     class="${classes.join(' ')}"
     data-month-span-bar
-    data-span-row="${bar.row}"
     style="grid-row:${bar.row + 1};grid-column:${bar.startCol + 1} / span ${bar.endCol - bar.startCol + 1};--month-span-lane:${bar.lane}"
     data-open-date="${bar.openDate}"
     title="${label}"
@@ -374,10 +373,8 @@ function renderMonth() {
   for (const bar of spanModel.bars) countBarDays(spanCountByDay, bar);
   for (const bar of spanModel.overflow) countBarDays(overflowCountByDay, bar);
 
+  // 长条与日格并列挂在同一个网格上（显式占位），共享动态行高。
   const spanBarsHtml = spanModel.bars.map(monthSpanBar).join('');
-  const spanLayer = spanBarsHtml
-    ? `<div class="month-span-layer">${spanBarsHtml}</div>`
-    : '';
 
   const weekdayRow = WEEKDAY_LABELS.map(
     (label) => `<div class="month-weekday">周${label}</div>`
@@ -395,26 +392,29 @@ function renderMonth() {
       if (isSameDay(date, today)) classes.push('is-today');
 
       const visibleChips = items.slice(0, 2).map((item) => item.html).join('');
-      // 放不下的 chip 与超出车道的长条由 fitMonthLayout 事后按真实行高隐藏并
-      // 计数，所以这里只渲染前两个 chip，「+N 项」交给适配层生成。
-      const extra = Math.max(0, items.length - 2) + overflowCount;
+      // 「+N 项」= 超出两个 chip 的安排 + 被车道上限挤掉的长条；周行高度按内容
+      // 动态延伸（CSS），chip 与指示器始终完整可见，无需事后适配。
+      const hiddenCount = items.length - 2 + overflowCount;
+      const more = hiddenCount > 0 ? `<span class="month-more">+${hiddenCount} 项</span>` : '';
       const total = items.length + spanCount;
       const countLabel = total === 0 ? '无安排' : `${total} 项安排`;
-      // 本周行有长条时，chip 统一下移让位（与长条层同一几何）。
+      // 长条与日格同处一个网格：日格显式占位，长条按周行 / 列区间摆放，
+      // 行高随内容动态延伸时长条跟随同一行（不再用覆盖层，避免行高漂移）。
       const lanes = lanesByRow[Math.floor(index / 7)];
-      const laneStyle = lanes > 0 ? ` style="--month-span-lanes:${lanes}"` : '';
+      const styleParts = [`grid-row:${Math.floor(index / 7) + 1}`, `grid-column:${(index % 7) + 1}`];
+      if (lanes > 0) styleParts.push(`--month-span-lanes:${lanes}`);
+      const laneStyle = ` style="${styleParts.join(';')}"`;
 
       return `<button
         type="button"
         class="${classes.join(' ')}"
         data-open-date="${key}"
-        data-month-extra="${extra}"
         ${laneStyle}
         aria-label="${date.getMonth() + 1}月${date.getDate()}日，${countLabel}，打开日视图"
         ${isSameDay(date, today) ? 'aria-current="date"' : ''}
       >
         <span class="date-line"><span class="date-num">${date.getDate()}</span></span>
-        <span class="chips">${visibleChips}</span>
+        <span class="chips">${visibleChips}${more}</span>
       </button>`;
     })
     .join('');
@@ -422,108 +422,8 @@ function renderMonth() {
   return `<div class="month-view">
     ${reviewHtml}
     <div class="month-weekdays">${weekdayRow}</div>
-    <div class="month-grid">${cells}${spanLayer}</div>
+    <div class="month-grid">${cells}${spanBarsHtml}</div>
   </div>`;
-}
-
-/**
- * Month layout fitting, run after every month render and on viewport resize.
- *
- * Both jobs are measurement-driven, because a week row's height is only known
- * after layout:
- *
- * 1. Span-bar pitch: a row's bar band must leave room for at least one chip
- *    line (or the 「+N 项」 indicator). Rows too short for the default pitch
- *    tighten it — down to `--month-span-pitch-min` — so bars never push the
- *    chip band out of the cell.
- * 2. Chip visibility: hide trailing chips that no longer fit and keep the
- *    「+N 项」 indicator honest. It counts the chips pushed out of the cell
- *    plus the bars dropped by the lane cap (`data-month-extra`). When even
- *    the indicator does not fit it is dropped instead of half-clipped; the
- *    cell's `aria-label` always carries the true total.
- *
- * @param {HTMLElement} root view root that contains the rendered month grid
- */
-function fitMonthLayout(root) {
-  const cells = [...root.querySelectorAll('.month-cell')];
-  if (cells.length === 0) return;
-
-  const pixels = (value, fallback) => {
-    const parsed = Number.parseFloat(value);
-    return Number.isFinite(parsed) ? parsed : fallback;
-  };
-
-  // 1. 每行的长条节距按真实行高收紧，给 chip / 指示器留出至少一条。
-  const rowCount = Math.ceil(cells.length / 7);
-  for (let row = 0; row < rowCount; row += 1) {
-    const rowCells = cells.slice(row * 7, row * 7 + 7);
-    if (rowCells.length === 0) continue;
-    const first = rowCells[0];
-    const lanes = Number(first.style.getPropertyValue('--month-span-lanes')) || 0;
-    const cellStyle = getComputedStyle(first);
-    const spanTop = pixels(cellStyle.getPropertyValue('--month-span-top'), 35);
-    const pitchMin = pixels(cellStyle.getPropertyValue('--month-span-pitch-min'), 15);
-    const pitchMax = pixels(cellStyle.getPropertyValue('--month-span-pitch-max'), 21);
-    const minChip = pixels(cellStyle.getPropertyValue('--month-span-min-chip'), 22);
-    const padBottom = pixels(cellStyle.paddingBottom, 4);
-
-    let pitch = pitchMax;
-    if (lanes > 0) {
-      const rowHeight = first.getBoundingClientRect().height;
-      const budget = rowHeight - spanTop - padBottom - minChip;
-      pitch = Math.max(pitchMin, Math.min(pitchMax, Math.floor(budget / lanes)));
-    }
-    const barHeight = Math.max(12, pitch - 3);
-
-    for (const cell of rowCells) {
-      cell.style.setProperty('--month-span-pitch', `${pitch}px`);
-      cell.style.setProperty('--month-span-bar-height', `${barHeight}px`);
-    }
-    const rowBars = root.querySelectorAll(`[data-month-span-bar][data-span-row="${row}"]`);
-    for (const bar of rowBars) {
-      bar.style.setProperty('--month-span-pitch', `${pitch}px`);
-      bar.style.setProperty('--month-span-bar-height', `${barHeight}px`);
-    }
-  }
-
-  // 2. chip 可见性与「+N 项」计数。
-  for (const cell of cells) {
-    const chips = cell.querySelector('.chips');
-    if (!chips) continue;
-
-    const stale = chips.querySelector('.month-more');
-    if (stale) stale.remove();
-    const chipEls = [...chips.children];
-    for (const chip of chipEls) chip.classList.remove('chip--hidden');
-
-    const extra = Number(cell.dataset.monthExtra) || 0;
-    let hidden = 0;
-    const fits = () => chips.scrollHeight <= chips.clientHeight + 1;
-    const hideOne = () => {
-      if (hidden >= chipEls.length) return false;
-      chipEls[chipEls.length - 1 - hidden].classList.add('chip--hidden');
-      hidden += 1;
-      return true;
-    };
-
-    while (!fits() && hideOne()) {
-      /* 从末尾开始藏，直到剩余内容放得下 */
-    }
-
-    const total = extra + hidden;
-    if (total <= 0) continue;
-
-    const indicator = document.createElement('span');
-    indicator.className = 'month-more';
-    indicator.textContent = `+${total} 项`;
-    chips.appendChild(indicator);
-    // 指示器自身也占一行；放不下就再藏一个 chip 并更新计数。
-    while (!fits() && hideOne()) {
-      indicator.textContent = `+${extra + hidden} 项`;
-    }
-    // 指示器仍然放不下时去掉，避免半截文字；总数仍在 aria-label 与日视图里。
-    if (!fits()) indicator.remove();
-  }
 }
 
 function renderWeek() {
@@ -716,7 +616,6 @@ function render() {
 
   if (state.view === 'month') {
     root.innerHTML = renderMonth();
-    fitMonthLayout(root);
   } else if (state.view === 'week') {
     root.innerHTML = renderWeek();
     weekChartView = mountWeekChart({
@@ -757,15 +656,6 @@ function render() {
 inbox.subscribe(() => {
   if (state.view === 'month') render();
   else if (state.view === 'day') refreshDayView();
-});
-
-// 月视图 chip 的可见数量取决于行长条占位后的真实行高；视口变化后只做一次轻量
-// 重新适配（不重绘整棵树，宽图表自身滚动的规则不变）。
-let fitMonthTimer = 0;
-window.addEventListener('resize', () => {
-  if (state.view !== 'month') return;
-  window.clearTimeout(fitMonthTimer);
-  fitMonthTimer = window.setTimeout(() => fitMonthLayout(root), 120);
 });
 
 function setView(view) {
