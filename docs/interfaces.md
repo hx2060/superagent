@@ -132,6 +132,7 @@ interface PoolItem {
 - **任务占据的日期**由 `src/tasks.js` 的共享纯函数统一计算（`taskWindow` / `taskDayEntry` / `taskReviewGroups`），月视图 chip、周图方块、日视图当日计划三处消费同一答案，不得在视图内另写一套。
 - 周图一个任务一行（定时日程也各占一行）：定时任务占开始当天，带 `due` 时从 `date` 跨到截止日；仅截止任务从今天画到截止日（截止日已过时占截止当天）；方块内显示准确时间或截止日。
 - 月视图分两种画法，都由 `taskWindow` 派生：**单日任务**（`date` 当天，含 `due` 与 `date` 同日、截止已过收敛到截止当天）显示任务 chip，`due` 与 `date` 不同日时截止日额外显示「截止」chip；**跨天任务**（窗口首尾不同日，含仅截止且截止未到的任务从今天起算）改画**跨天长条**，按周行裁剪、同周行按车道堆叠（最多 3 条，超出的段计入当日「+N 项」），长条内显示任务标题，颜色随任务状态。跨天任务不再在首尾两天各放 chip。
+- **长条与日格同网格、周行高度动态延伸**：长条不是覆盖层，而是与 42 个日格并列挂在同一个月网格上的显式占位项（长条按周行 / 列区间摆放，顶部偏移由自身 `margin-top` 承担——覆盖层方案会因图层 `padding` 缩小内容盒而使行高漂移、压住日期数字）。周行用 `minmax(72px, auto)`：内容（长条 + chip）放不下时整行长高、月视图内部滚动（`overflow: auto`，星期表头 sticky），空间富余时 6 行仍拉伸填满卡片；因此 chip 与「+N 项」始终完整可见，不需要事后裁切。
 - **当日计划**（日视图「清单」上半区）成员：截止日 = 当天、排期日 = 当天、或未完成且当天落在任务占据区间内（`taskDayEntry(...).inPlan`）。逾期未完成（截止已过且未完成）不再进入后续日期的计划，改由周 / 月「逾期回顾区」呈现。
 - **日进度**只统计当日计划成员（当日需要完成 + 未来截止未完成）；收集区与逾期任务不计入。跨天后当日计划自动滚动。
 - **逾期回顾区**（周视图图表上方、月视图网格上方横幅）：截止已过且未删除的任务，分「逾期未完成 / 已完成」两组，保留至删除，可切换状态，不计入周进度分母。
@@ -612,7 +613,7 @@ window.schedule.pool.remove('pool-01');
 
 ## 6. 版本与兼容
 
-- 当前接口版本 `0.8`；0.2 增量加入 `DailyTask`、`DailyTasksService`、`window.schedule.dailyTasks` 与每日任务 DOM；0.3 增量加入清单 / 便签 CRUD、任务可选时间字段与日视图时间表派生事件；0.4 增量加入任务可选 `due` 截止日期与行内展示；0.5 增量加入周图模块、月 / 周 / 日任务统一、任务可选 `id`、`window.schedule.tasks`、本地内容文件与机制层交接约定；0.6 增量加入「当日计划 / 收集区」分区与日进度口径、周 / 月逾期回顾区、全天任务（`date` 不带时间）、`due ≥ date` 写入校验、共享任务日期映射（`taskWindow` / `taskDayEntry` / `taskReviewGroups`）与 `listUnscheduledTasks()`；0.7 增量加入蓄水池（`PoolItem` / `PoolService` / `window.schedule.pool`、顶栏常驻入口与面板选择器、本地内容可选 `pool` 键）；0.8 增量加入月视图跨天长条（`monthSpanBars` 纯函数、`[data-month-span-bar]` 选择器，跨天任务从「首尾两个 chip」改为「一条按周行裁剪的长条」）。已发布字段与稳定选择器保持不变。
+- 当前接口版本 `0.8`；0.2 增量加入 `DailyTask`、`DailyTasksService`、`window.schedule.dailyTasks` 与每日任务 DOM；0.3 增量加入清单 / 便签 CRUD、任务可选时间字段与日视图时间表派生事件；0.4 增量加入任务可选 `due` 截止日期与行内展示；0.5 增量加入周图模块、月 / 周 / 日任务统一、任务可选 `id`、`window.schedule.tasks`、本地内容文件与机制层交接约定；0.6 增量加入「当日计划 / 收集区」分区与日进度口径、周 / 月逾期回顾区、全天任务（`date` 不带时间）、`due ≥ date` 写入校验、共享任务日期映射（`taskWindow` / `taskDayEntry` / `taskReviewGroups`）与 `listUnscheduledTasks()`；0.7 增量加入蓄水池（`PoolItem` / `PoolService` / `window.schedule.pool`、顶栏常驻入口与面板选择器、本地内容可选 `pool` 键）；0.8 增量加入月视图跨天长条（`monthSpanBars` 纯函数、`[data-month-span-bar]` 选择器，跨天任务从「首尾两个 chip」改为「一条按周行裁剪的长条」；长条与日格同网格显式占位、周行高度 `minmax(72px, auto)` 按内容动态延伸并在放不下时内部滚动，chip 与「+N 项」始终完整）。已发布字段与稳定选择器保持不变。
 - 0.6 的行为变化（需在 PR / 迁移说明中告知）：① 日视图「清单」不再展示全部任务，只展示当日计划 + 收集区；② `updateTask` 清空 `start` / `duration` 从「解绑日期」变为「变为全天任务」，解绑需显式 `date: ''`；③ `addTask({ date })` 不再静默忽略日期，而是创建全天任务；④ `due` 早于 `date` 的写入抛 `INBOX_TASK_DUE_INVALID`。
 - 新增字段必须可选，渲染层对未知可选字段保持忽略。
 - 颜色 / 图标 / 状态枚举新增时，需要同时补样式与回退；删除或重命名属于 breaking change。

@@ -373,10 +373,8 @@ function renderMonth() {
   for (const bar of spanModel.bars) countBarDays(spanCountByDay, bar);
   for (const bar of spanModel.overflow) countBarDays(overflowCountByDay, bar);
 
+  // 长条与日格并列挂在同一个网格上（显式占位），共享动态行高。
   const spanBarsHtml = spanModel.bars.map(monthSpanBar).join('');
-  const spanLayer = spanBarsHtml
-    ? `<div class="month-span-layer">${spanBarsHtml}</div>`
-    : '';
 
   const weekdayRow = WEEKDAY_LABELS.map(
     (label) => `<div class="month-weekday">周${label}</div>`
@@ -394,13 +392,18 @@ function renderMonth() {
       if (isSameDay(date, today)) classes.push('is-today');
 
       const visibleChips = items.slice(0, 2).map((item) => item.html).join('');
+      // 「+N 项」= 超出两个 chip 的安排 + 被车道上限挤掉的长条；周行高度按内容
+      // 动态延伸（CSS），chip 与指示器始终完整可见，无需事后适配。
       const hiddenCount = items.length - 2 + overflowCount;
       const more = hiddenCount > 0 ? `<span class="month-more">+${hiddenCount} 项</span>` : '';
       const total = items.length + spanCount;
       const countLabel = total === 0 ? '无安排' : `${total} 项安排`;
-      // 本周行有长条时，chip 统一下移让位（与长条层同一几何）。
+      // 长条与日格同处一个网格：日格显式占位，长条按周行 / 列区间摆放，
+      // 行高随内容动态延伸时长条跟随同一行（不再用覆盖层，避免行高漂移）。
       const lanes = lanesByRow[Math.floor(index / 7)];
-      const laneStyle = lanes > 0 ? ` style="--month-span-lanes:${lanes}"` : '';
+      const styleParts = [`grid-row:${Math.floor(index / 7) + 1}`, `grid-column:${(index % 7) + 1}`];
+      if (lanes > 0) styleParts.push(`--month-span-lanes:${lanes}`);
+      const laneStyle = ` style="${styleParts.join(';')}"`;
 
       return `<button
         type="button"
@@ -419,7 +422,7 @@ function renderMonth() {
   return `<div class="month-view">
     ${reviewHtml}
     <div class="month-weekdays">${weekdayRow}</div>
-    <div class="month-grid">${cells}${spanLayer}</div>
+    <div class="month-grid">${cells}${spanBarsHtml}</div>
   </div>`;
 }
 

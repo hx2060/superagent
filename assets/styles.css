@@ -232,11 +232,16 @@ button {
   flex: 1;
   flex-direction: column;
   min-width: 0;
+  /* 周行高度按内容动态延伸：长条 + chip 放不下时整行长高、月视图内部滚动，
+     空间富余时 6 行仍拉伸填满卡片（见 .month-grid 的 align-content）。 */
+  overflow: auto;
+  overscroll-behavior: contain;
   /* 跨天长条几何：与 .date-line(25) + .chips margin(4) 对齐；
      900px 以下 .month-cell 上内边距变为 5px，见文末媒体查询。 */
   --month-span-top: 35px;
   --month-span-bar-height: 18px;
   --month-span-pitch: 21px;
+  --month-span-chip-base: 4px;
 }
 
 /* 逾期回顾横幅：截止已过且未删除的任务，保留供回顾（与周图回顾区同规则）。 */
@@ -350,6 +355,9 @@ button {
 }
 
 .month-weekdays {
+  position: sticky;
+  top: 0;
+  z-index: 2;
   display: grid;
   flex: none;
   grid-template-columns: repeat(7, minmax(0, 1fr));
@@ -373,25 +381,14 @@ button {
   border-left: 0;
 }
 
+/* 周行高度动态延伸：minmax(72px, auto) + 默认 align-content: stretch ——
+   内容（长条 + chip）放不下时整行长高并由 .month-view 滚动，空间富余时
+   6 行仍拉伸填满卡片；flex: 1 0 auto 保证网格只涨不缩。 */
 .month-grid {
-  position: relative;
   display: grid;
-  flex: 1;
-  min-height: 0;
+  flex: 1 0 auto;
   grid-template-columns: repeat(7, minmax(0, 1fr));
-  grid-template-rows: repeat(6, minmax(0, 1fr));
-}
-
-/* 跨天长条层：与 .month-grid 同一几何的覆盖层。长条按周行 / 列区间摆放，
-   同一周行按车道堆叠；该周行的日格 chip 经 --month-span-lanes 统一下移让位。 */
-.month-span-layer {
-  position: absolute;
-  inset: 0;
-  display: grid;
-  grid-template-columns: repeat(7, minmax(0, 1fr));
-  grid-template-rows: repeat(6, minmax(0, 1fr));
-  padding-top: var(--month-span-top);
-  pointer-events: none;
+  grid-template-rows: repeat(6, minmax(72px, auto));
 }
 
 .month-span-bar {
@@ -399,7 +396,7 @@ button {
   align-self: start;
   min-width: 0;
   height: var(--month-span-bar-height);
-  margin-top: calc(var(--month-span-lane, 0) * var(--month-span-pitch));
+  margin-top: calc(var(--month-span-top) + var(--month-span-lane, 0) * var(--month-span-pitch));
   margin-inline: 1px;
   padding: 0 6px;
   overflow: hidden;
@@ -527,8 +524,9 @@ button {
   flex-direction: column;
   gap: 3px;
   min-height: 0;
-  /* 本周行有跨天长条时整体下移让位（--month-span-lanes 由月视图写入）。 */
-  margin-top: calc(4px + var(--month-span-lanes, 0) * var(--month-span-pitch, 21px));
+  /* 本周行有长条时整体下移让位（--month-span-lanes 由月视图写入）；行高按内容
+     动态延伸，chip 与「+N 项」始终完整，无需事后适配。 */
+  margin-top: calc(var(--month-span-chip-base, 4px) + var(--month-span-lanes, 0) * var(--month-span-pitch, 21px));
   overflow: hidden;
 }
 
