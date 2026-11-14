@@ -193,7 +193,8 @@ function periodLabel() {
 }
 
 function eventChip(event) {
-  return `<span class="chip chip--${event.color}"><span class="chip-title">${escapeHtml(event.title)}</span></span>`;
+  const title = escapeHtml(event.title);
+  return `<span class="chip chip--${event.color}" title="${title}"><span class="chip-title">${title}</span></span>`;
 }
 
 function taskChip(task, due) {
@@ -203,7 +204,8 @@ function taskChip(task, due) {
   if (task.status === 'done') classes.push('is-done');
   const prefix = due ? '截止 ' : '';
   const time = !due && task.start ? `${task.start} · ` : '';
-  return `<span class="${classes.join(' ')}"><span class="chip-title">${prefix}${time}${escapeHtml(task.title)}</span></span>`;
+  const label = `${prefix}${time}${escapeHtml(task.title)}`;
+  return `<span class="${classes.join(' ')}" title="${label}"><span class="chip-title">${label}</span></span>`;
 }
 
 /**
@@ -523,7 +525,7 @@ function renderDayTimeline(dayEvents) {
           <span class="day-pill-icon">${eventIcon(event.icon)}</span>
         </div>
         <div class="day-event-copy" data-column="${column}" data-columns="${columns}" style="top:${top}%;${copyPosition}">
-          <span class="day-event-title">${escapeHtml(event.title)}</span>
+          <span class="day-event-title" title="${escapeHtml(event.title)}">${escapeHtml(event.title)}</span>
           <span class="day-event-time">${formatTimeRange(event.start, event.end)} · ${formatDuration(end - start)}</span>
           ${event.note ? `<span class="day-event-note">${escapeHtml(event.note)}</span>` : ''}
         </div>`;
