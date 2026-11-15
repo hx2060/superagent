@@ -840,18 +840,6 @@ button {
   border-bottom: 0;
 }
 
-.task-emoji {
-  display: grid;
-  place-items: center;
-  flex: none;
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
-  background: #fbefeb;
-  font-size: 14px;
-  line-height: 1;
-}
-
 .task-body {
   display: flex;
   min-width: 0;
@@ -887,10 +875,6 @@ button {
 .day-task[data-status="done"] .task-title {
   color: #a7948f;
   text-decoration: line-through;
-}
-
-.day-task[data-status="done"] .task-emoji {
-  opacity: 0.65;
 }
 
 .task-check {

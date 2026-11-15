@@ -261,9 +261,8 @@ export function mount(context) {
     const dueLabel = task.due ? formatDueLabel(task.due) : '';
     const allDayAttr = task.date && !task.start ? ' data-all-day="true"' : '';
     return `<li class="day-task mod-inbox-task" data-task-row="${id}" data-status="${status}" data-scheduled="${task.start ? 'true' : 'false'}"${allDayAttr}>
-      <span class="task-emoji" aria-hidden="true">${escapeHtml(task.icon)}</span>
       <span class="task-body">
-        <span class="task-title">${title}</span>
+        <span class="task-title" title="${title}">${title}</span>
         <span class="task-status-label">${label}</span>
         ${taskFlag(entry)}
         ${dueLabel ? `<span class="mod-inbox-task-due" data-task-due="${escapeHtml(task.due)}">${escapeHtml(dueLabel)}</span>` : ''}
