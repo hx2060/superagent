@@ -30,6 +30,7 @@ local/
 
 - 缺失或损坏的 `local/schedule.json` 不会影响应用：`src/data.js` 的空白种子作为回退。
 - 应用**不会**把 UI 编辑写回本地文件；页面内新增 / 修改 / 删除仍只在当前会话有效。需要持久化的内容由机器人或使用者写入 `local/schedule.json` 后刷新。
+- 例外（0.9 起，需求方选定方案 B）：蓄水池的**条目进度**与**取用 / 进度记录**存本机浏览器 localStorage（`schedule.pool.progress.v1` / `schedule.pool.records.v1`，记录上限 500 条）。与 `local/schedule.json` 同边界——只在本机、不入库、不提交、不上传；隐私模式 / 配额不足时静默退化为「仅当前会话」。
 - 公开预览是脱敏副本，不能包含 `local/`（见 `docs/integration.md` 第 4 节）。
 
 ## 3. 截图与视觉验证

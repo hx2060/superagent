@@ -1,6 +1,6 @@
 # attention-switch · 蓄水池（多种类任务切换注意力）
 
-空白 / 瓶颈时刻的「选项池」：把所拥有的所有有效内容（网课、论文、网页、工作任务、日常杂事）收进池子，按**三档学习状态**（娱乐性学习 / 简单看过 / 理解学习）各给出几个选项，让注意力有去处，且不需要思考「切换成什么」。
+空白 / 瓶颈时刻的「选项池」：把所拥有的所有有效内容（网课、论文、网页、工作任务、日常杂事）收进池子，按**三档学习状态**（娱乐性学习 / 简单看过 / 理解学习）各给出几个选项，让注意力有去处，且不需要思考「切换成什么」。第二迭代（2026-11-15 需求方选定方案 B）增加**条目进度**（与任务同一套三态）与**本机取用 / 进度记录**，面板内「反馈」视图据此给出可追踪的信号。
 
 设计讨论与决策记录见本文件 git 历史与 PR #8；本文档描述**已实现**的契约。
 
@@ -25,6 +25,8 @@ interface PoolItem {
   tiers: Array<'leisure' | 'browse' | 'deep'>;             // 三档归属，非空、可多档
   note?: string;               // 纯文本，最多 200 字符
   createdAt: string;           // YYYY-MM-DD
+  progress?: 'todo' | 'partial' | 'done';   // 条目进度（与任务同一枚举）；省略 = 不跟踪
+  progressUpdatedAt?: string;  // YYYY-MM-DD；progress 变更时取当天
 }
 ```
 
@@ -63,16 +65,24 @@ mount(context) -> {
 | `listItems()` | 全部条目副本（按加入顺序） |
 | `listByTier(tier)` | 含该档的条目副本 |
 | `optionsFor(tier, count = 5)` | 该档选项：会话内未取用过优先，同级按加入时间倒序；`count` 暂定 5 |
-| `markUsed(id)` | 会话内取用标记（只影响排序，不产生历史） |
-| `subscribe(listener)` | 返回退订函数；增改删 / 取用时同步通知 |
+| `markUsed(id, { kind?, tier? })` | 会话内取用标记 + 一条本机记录（`kind` = `open` / `expand`，`tier` 缺省条目第一档） |
+| `setItemProgress(id, progress?)` | 设置 / 清除条目进度（三态循环的落点）；写进度覆盖层并记一条 `progress` 记录 |
+| `useRecords()` | 取用 / 进度记录副本（最近 500 条，旧 → 新） |
+| `progressLog(id)` | 单条目的进度变更历史 |
+| `stats(now?)` | 反馈统计（`poolStats`）：分布、近 7 日取用、沉睡条目、进度停滞、完成率 |
+| `subscribe(listener)` | 返回退订函数；增改删 / 取用 / 进度变更时同步通知 |
 
-错误码：`POOL_TITLE_INVALID`、`POOL_URL_INVALID`、`POOL_SOURCE_INVALID`、`POOL_TIER_INVALID`、`POOL_NOTE_INVALID`、`POOL_DUPLICATE_ID`、`POOL_NOT_FOUND`。种子加载对坏条目**跳过不抛错**（与本地内容文件的宽容读取一致）。
+构造选项 `options.storage`：最小 `getItem` / `setItem` 适配器（宿主传 localStorage 包装，测试传内存）。进度覆盖层键 `schedule.pool.progress.v1`，记录键 `schedule.pool.records.v1`（上限 500 条）；适配器缺失或抛错（隐私模式 / 配额）时静默退化为「仅当前会话」。
+
+错误码：`POOL_TITLE_INVALID`、`POOL_URL_INVALID`、`POOL_SOURCE_INVALID`、`POOL_TIER_INVALID`、`POOL_NOTE_INVALID`、`POOL_PROGRESS_INVALID`、`POOL_DUPLICATE_ID`、`POOL_NOT_FOUND`。种子加载对坏条目**跳过不抛错**（与本地内容文件的宽容读取一致）。
 
 ## 界面与交互
 
 - **入口**：顶栏常驻「蓄水池」按钮（`[data-pool-toggle]`），`aria-expanded` 同步开合；任何视图下可用。
 - **面板**：模态层（背景 + 白板），标题、条目总数、三档标签（含各档计数）。
-- **取用**：点档位 → 显示该档最多 5 个选项；点选项——有链接的新标签页打开（`noopener`）并标记取用、排到后面；无链接的展开详情（备注 / 链接）。
+- **取用**：点档位 → 显示该档最多 5 个选项；点选项——有链接的新标签页打开（`noopener`）并标记取用、排到后面；无链接的展开详情（备注 / 链接）。取用 / 展开各记一条本机记录（`open` / `expand`）。
+- **进度**：选项行的进度按钮按「未跟踪 → 待完成 → 部分完成 → 完成 → 未跟踪」循环（与任务三态同一交互）；录入 / 编辑表单内也可选进度。进度存本机覆盖层，刷新不丢；`local/schedule.json` 的 `pool` 条目可带 `progress` 初值。
+- **反馈**：操作区「反馈」按钮打开反馈视图（与三档并列，零主干登记）——总览（条目数 / 进度分布 / 完成率）、近 7 日取用（次数 / 涉及条目 / 档位分布）、沉睡条目（入池以来无取用）、进度停滞（部分完成且近 7 日无取用）、最近记录（最近 10 条）。`Escape` 依次收起表单 / 导入列表 / 反馈视图 / 关闭面板。
 - **收录（三种形式）**：① 面板内表单（标题 / 链接 / 来源 / 档位多选 / 备注）；② dsh 下发 `window.schedule.pool.add`；③ 本地内容文件 `local/schedule.json` 的 `pool` 键（启动时读取）。
 - **从清单加入**：面板内只读 `services.inbox` 的任务列表，点「加入」把任务标题带入收录表单（来源默认「工作」，档位自选）——单向联动，池内容不回清单。
 - **编辑 / 删除**：行内编辑走同一表单；删除两步确认（再点一次「确认删除」）。
@@ -84,17 +94,18 @@ mount(context) -> {
 - 池是**新实体**，与 `Task` / `DailyTask` 并列；不改造它们，也不与它们同步状态。
 - 一条目可属多档；同一内容不必录两遍。
 - 编辑只存当前页面会话；刷新后回到 `local/schedule.json` 的 `pool` 初值（与其它模块一致）。
+- **进度与记录例外**：条目进度与取用 / 进度记录存本机 localStorage（进度覆盖层 + 最近 500 条记录），刷新不丢；与本地内容文件同边界（只在本机、不入库、不提交）。
 - 所有文本按纯文本渲染转义；不写入 HTML；不读取凭据。
 - 样式全部 `.mod-attention-switch-` 前缀，不修改全局元素样式；零运行时依赖。
 
 ## 注册点（主干改动，接口登记点）
 
 - `index.html`：顶栏 `.topbar-right` 包裹视图切换 + `<button class="pool-entry" data-pool-toggle>`；`#view-root` 之后新增 `<div id="pool-panel" data-module-root="attention-switch" hidden>`；一行模块样式 `<link>`。
-- `src/app.js`：import 模块；`createPoolStore(seed.pool)`；`services.pool` 传入模块；入口点击 / `attention-switch:close` 控制可见性；面板打开时屏蔽日历方向键；`window.schedule.pool`。
+- `src/app.js`：import 模块；`createPoolStore(seed.pool, { storage })`（localStorage 适配器）；`services.pool` 传入模块；入口点击 / `attention-switch:close` 控制可见性；面板打开时屏蔽日历方向键；`window.schedule.pool`（含 `setProgress` / `stats` / `records`）。
 - `src/data.js`：`samplePool`（空）+ `pickSeedData` 增加可选 `pool` 键。
 - `assets/styles.css`：`.topbar-right` / `.pool-entry` 两条顶栏样式（模块面板样式在模块内）。
 
 ## 测试与验收
 
-- `npm test`：store 覆盖校验、多档、选取与排序、会话标记、订阅、种子容错（13 项）。
+- `npm test`：store 覆盖校验、多档、选取与排序、会话标记、订阅、种子容错、进度校验与循环、进度覆盖层与持久化、记录追加与 500 条上限、`poolStats` 全指标含空态与 7 日窗口边界、storage 容错（23 项）。
 - 浏览器验证（本地 headless，证据在 `local/evidence/attention-switch/`，不入仓库）：1440 / 1024 / 768 / 390 无页面横向溢出（含面板打开态）；Baseline（`origin/main`，同视口同内容）对比仅新增顶栏入口；三档切换、多档命中、三种收录、从清单加入、编辑、两步删除、`Escape`、焦点回归、方向键屏蔽、月 / 周 / 日视图回归、无 console error 均通过（44 项）。

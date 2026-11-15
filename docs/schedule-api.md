@@ -148,7 +148,7 @@ window.schedule.dailyTasks.getStatus('daily-water', '2026-11-08');
 
 ### 3.3 `window.schedule.pool`（蓄水池）
 
-蓄水池条目（网课 / 论文 / 网页 / 工作 / 杂事），按三档学习状态归档；只存当前页面会话，持久请写本地内容文件的 `pool` 键。
+蓄水池条目（网课 / 论文 / 网页 / 工作 / 杂事），按三档学习状态归档。条目增删只存当前页面会话（持久请写本地内容文件的 `pool` 键）；**条目进度与取用 / 进度记录自 0.9 起存本机 localStorage**（键 `schedule.pool.progress.v1` / `schedule.pool.records.v1`，只在本机、不入库）。
 
 ```js
 window.schedule.pool.add({
@@ -157,12 +157,16 @@ window.schedule.pool.add({
   source: 'course',                 // course | paper | web | work | chore
   tiers: ['deep', 'leisure'],       // 至少一档；leisure | browse | deep
   note: '看到第 3 讲',
+  progress: 'partial',              // 可选：todo | partial | done
 });
-window.schedule.pool.list();        // [{ id, title, url, source, tiers, note, createdAt }]
+window.schedule.pool.list();        // [{ id, title, url, source, tiers, note, createdAt, progress?, progressUpdatedAt? }, ...]
 window.schedule.pool.remove('pool-01');
+window.schedule.pool.setProgress({ id: 'pool-01', progress: 'done' }); // 省略 progress = 不再跟踪
+window.schedule.pool.stats();       // 反馈统计：total/byTier/bySource/byProgress/used7d/dormant/stalePartial/doneRatio…
+window.schedule.pool.records();     // 最近 500 条记录（open / expand / progress）
 ```
 
-`add` 的重复 `id` 会抛错；不传 `id` 时自动生成。无 `update` 运行时方法；修改请用面板内编辑。
+`add` 的重复 `id` 会抛错；不传 `id` 时自动生成。无 `update` 运行时方法；修改请用面板内编辑。`setProgress` 的 `progress` 必须是 `todo / partial / done`（非法抛 `POOL_PROGRESS_INVALID`）。
 
 ### 3.4 错误约定
 
@@ -177,7 +181,7 @@ window.schedule.pool.remove('pool-01');
 | `INBOX_TASK_NOT_FOUND` | 更新 / 删除 / 读写状态时 id 不存在 |
 | `INBOX_TASK_STATUS_INVALID` | 状态不是 `todo / partial / done` |
 | `DAILY_TASK_INVALID` / `DAILY_TASK_DUPLICATE_ID` / `DAILY_TASK_NOT_FOUND` / `DAILY_TASK_STATUS_INVALID` / `DAILY_TASK_DATE_INVALID` | 每日任务对应错误 |
-| `POOL_TITLE_INVALID` / `POOL_URL_INVALID` / `POOL_SOURCE_INVALID` / `POOL_TIER_INVALID` / `POOL_NOTE_INVALID` / `POOL_DUPLICATE_ID` / `POOL_NOT_FOUND` | 蓄水池条目对应错误（标题 / 链接 / 来源 / 档位 / 备注 / 重复 id / id 不存在） |
+| `POOL_TITLE_INVALID` / `POOL_URL_INVALID` / `POOL_SOURCE_INVALID` / `POOL_TIER_INVALID` / `POOL_NOTE_INVALID` / `POOL_PROGRESS_INVALID` / `POOL_DUPLICATE_ID` / `POOL_NOT_FOUND` | 蓄水池条目对应错误（标题 / 链接 / 来源 / 档位 / 备注 / 进度值非法 / 重复 id / id 不存在） |
 
 ## 4. 本地内容文件（持久）
 
@@ -197,7 +201,7 @@ window.schedule.pool.remove('pool-01');
 }
 ```
 
-`pool` 为可选键；每条需要 `title` / `source` / `tiers`，`url` / `note` 可省，`id` 建议提供。坏条目跳过不阻塞启动。
+`pool` 为可选键；每条需要 `title` / `source` / `tiers`，`url` / `note` / `progress` 可省（`progress` 为 `todo / partial / done`，可作初值；运行中的进度以本机 localStorage 覆盖层为准），`id` 建议提供。坏条目跳过不阻塞启动。
 
 带内容示例（使用中性占位，实际内容按需替换）：
 
@@ -291,7 +295,7 @@ $EDITOR local/schedule.json
 
 ## 7. 版本与兼容
 
-- 当剂接口版本 `0.7`；本版本新增：蓄水池（`window.schedule.pool.add / list / remove`、本地内容可选 `pool` 键、三档学习状态与多档归档）；上一版本新增：全天任务（只传 `date`）、当日计划 / 收集区分区与日进度口径、周 / 月逾期回顾区、`due` 不得早于 `date` 的写入校验；`updateTask` 清空时间从「解绑日期」改为「变为全天任务」（解绑需显式 `date: ''`）。
+- 当前接口版本 `0.9`；0.9 新增：蓄水池进度与反馈（`window.schedule.pool.setProgress / stats / records`、条目可选 `progress` 字段、进度与记录存本机 localStorage、错误码 `POOL_PROGRESS_INVALID`）与「纸质统一」美工；0.8 新增：月视图跨天长条；0.7 新增：蓄水池（`window.schedule.pool.add / list / remove`、本地内容可选 `pool` 键、三档学习状态与多档归档）；上一版本新增：全天任务（只传 `date`）、当日计划 / 收集区分区与日进度口径、周 / 月逾期回顾区、`due` 不得早于 `date` 的写入校验；`updateTask` 清空时间从「解绑日期」改为「变为全天任务」（解绑需显式 `date: ''`）。
 - 新增字段保持可选；已发布字段与方法不删除、不改语义。
 - 破坏性变更需升级版本，并同步 `docs/interfaces.md` 与 `docs/integration.md`。
 - 本文件的示例内容均为中性占位；真实任务 / 时间 / 便签不写入仓库。

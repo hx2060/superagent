@@ -1,6 +1,6 @@
 # 日程 · 接口说明
 
-版本：`0.8`（PR #3 主干基线 + 每日任务 + 清单 / 便签编辑 + 周图任务 × 时间方块 + 月 / 周 / 日任务统一 + 本地内容与添加接口 + 当日计划 / 收集区分区 + 逾期回顾区 + 全天任务 + 蓄水池（attention-switch）多档选项池 + 月视图跨天长条）
+版本：`0.9`（PR #3 主干基线 + 每日任务 + 清单 / 便签编辑 + 周图任务 × 时间方块 + 月 / 周 / 日任务统一 + 本地内容与添加接口 + 当日计划 / 收集区分区 + 逾期回顾区 + 全天任务 + 蓄水池（attention-switch）多档选项池 + 月视图跨天长条 + 蓄水池进度与反馈追踪（方案 B） + 纸质统一美工）
 适用范围：当前静态实现、后续模块与后端对接
 
 本文档说明「日程」当前**已经实现**的模块接口、数据契约与 DOM 契约，以及预留的扩展接口。接口变更必须同步修改本文档，并按 `AGENTS.md` 的规则评审。
@@ -113,6 +113,19 @@ interface PoolItem {
   tiers: PoolTier[];          // 非空、去重；一条目可属多档
   note?: string;              // 纯文本，最多 200 字符
   createdAt: string;          // YYYY-MM-DD
+  progress?: PoolProgress;    // 条目进度；省略 = 不跟踪
+  progressUpdatedAt?: string; // YYYY-MM-DD；progress 变化时取当天
+}
+type PoolProgress = 'todo' | 'partial' | 'done';  // 与任务同一套三态枚举
+
+interface PoolUseRecord {      // 取用 / 进度记录；只存本机（localStorage），不入库
+  at: string;                 // YYYY-MM-DD HH:mm（本地时间）
+  kind: 'open' | 'expand' | 'progress';
+  itemId: string;
+  source: PoolSource;
+  tier: PoolTier;
+  from?: PoolProgress | null; // kind='progress'：变更前（null = 此前不跟踪）
+  to?: PoolProgress | null;   // kind='progress'：变更后（null = 不再跟踪）
 }
 // 蓄水池（attention-switch 模块）是独立实体，与 Task / DailyTask 并列：
 // 不绑定日期、不进时间表 / 周图 / 月视图，也不与清单任务同步状态。
@@ -145,7 +158,10 @@ interface PoolItem {
 - `DailyTask.recurrence` 固定为 `daily`；定义没有日期字段，日期只用于读取/写入当天的完成状态；跨天默认回到 `todo`。
 - 每日任务只在日视图展示和手工添加；月 / 周视图不展示每日任务条。清单任务按日期进入月 / 周视图，两者共用同一份 store。
 - `PoolItem.tiers` 非空且只含已知档位（写入时抛 `POOL_TIER_INVALID`）；`url` 必须是 `http(s)://` 开头（`POOL_URL_INVALID`）；`createdAt` 必须是真实日期键，缺省取当天。
-- 蓄水池条目的增改删只存当前页面会话；刷新后回到 `local/schedule.json` 的 `pool` 初值；「从清单加入」是单向快照，之后池与清单互不影响。
+- `PoolItem.progress` 省略或为 `todo / partial / done`（非法值抛 `POOL_PROGRESS_INVALID`）；`progressUpdatedAt` 必须是真实日期键，`progress` 存在时缺省取当天。条目进度循环：未跟踪 → 待完成 → 部分完成 → 完成 → 未跟踪（与任务三态同一枚举，展示同口径）。
+- 蓄水池条目的增改删只存当前页面会话，刷新后回到 `local/schedule.json` 的 `pool` 初值（可与进度初值合并）；「从清单加入」是单向快照，之后池与清单互不影响。
+- **进度覆盖层与取用 / 进度记录存本机 localStorage**（键 `schedule.pool.progress.v1` / `schedule.pool.records.v1`）：进度以本机记录覆盖种子初值，刷新不丢；记录只保留最近 500 条。两者与 `local/schedule.json` 同边界——只在本机、不入库、不提交；隐私模式 / 配额不足时静默退化为「仅当前会话」。
+- `poolStats(items, records, now)` 是纯函数：无记录 / 无进度字段时全指标有定义（0 / 空数组）；「近 7 日」= 今天起往前 6 天（含今天）；取用频次只数 `open` / `expand`，进度变更单独记录不计入使用。
 - 清单 / 便签的新增、修改、删除只保存在当前页面会话（内存 store）；刷新后回到本地内容文件 / 空白种子的初始状态。
 
 ### 2.4 示例数据
@@ -273,10 +289,15 @@ store 方法：
 | `POOL_SOURCES` / `POOL_TIERS` | `course\|paper\|web\|work\|chore` / `leisure\|browse\|deep` |
 | `POOL_SOURCE_LABELS` / `POOL_TIER_LABELS` | 中文展示名（网课 / 论文 / 网页 / 工作 / 杂事；娱乐性学习 / 简单看过 / 理解学习） |
 | `POOL_TITLE_MAX_LENGTH` / `POOL_NOTE_MAX_LENGTH` / `POOL_DEFAULT_OPTION_COUNT` | 80 / 200 / 5 |
+| `POOL_PROGRESS_STATES` / `POOL_PROGRESS_LABELS` | `todo\|partial\|done` / 待完成 · 部分完成 · 完成 |
+| `POOL_RECORD_KINDS` / `POOL_RECORD_LIMIT` | `open\|expand\|progress` / 500 |
+| `POOL_RECORDS_STORAGE_KEY` / `POOL_PROGRESS_STORAGE_KEY` | `schedule.pool.records.v1` / `schedule.pool.progress.v1`（本机存储键） |
+| `nextPoolProgress(current)` | 进度循环下一步：未跟踪 → `todo` → `partial` → `done` → 未跟踪 |
 | `normalizePoolItem(input, options?)` | 校验并规范化；非法时抛带 `code` 的 `Error`（`options.createId` / `options.now` 供测试注入） |
-| `createPoolStore(seedItems, options?)` | 创建 store；种子中的坏条目跳过不抛错 |
+| `createPoolStore(seedItems, options?)` | 创建 store；种子中的坏条目跳过不抛错；`options.storage` 注入设备存储适配器（最小 `getItem` / `setItem`），省略则不持久 |
+| `poolStats(items, records, now?)` | 反馈统计纯函数：`total` / `byTier` / `bySource` / `byProgress` / `untracked` / `used7d` / `used7dByTier` / `used7dItems` / `dormant` / `stalePartial` / `doneRatio` |
 
-store 方法：`addItem` / `updateItem` / `deleteItem` / `listItems` / `listByTier(tier)` / `optionsFor(tier, count?)` / `markUsed(id)` / `subscribe(listener)`。`optionsFor` 的排序为会话内未取用过优先、同级按加入时间倒序（暂定规则，留空间供后续调整）。`markUsed` 只写会话内标记、不产生历史。错误码：`POOL_TITLE_INVALID` / `POOL_URL_INVALID` / `POOL_SOURCE_INVALID` / `POOL_TIER_INVALID` / `POOL_NOTE_INVALID` / `POOL_DUPLICATE_ID` / `POOL_NOT_FOUND`。
+store 方法：`addItem` / `updateItem` / `deleteItem` / `listItems` / `listByTier(tier)` / `optionsFor(tier, count?)` / `markUsed(id, { kind?, tier? })` / `setItemProgress(id, progress?)` / `useRecords()` / `progressLog(id)` / `stats(now?)` / `subscribe(listener)`。`optionsFor` 的排序为会话内未取用过优先、同级按加入时间倒序（暂定规则，留空间供后续调整）。`markUsed` 除会话内标记外追加一条本机记录（`kind` 缺省 `open`，`tier` 缺省条目第一档）；`setItemProgress` 写进度覆盖层并记一条 `progress` 记录；错误码：`POOL_TITLE_INVALID` / `POOL_URL_INVALID` / `POOL_SOURCE_INVALID` / `POOL_TIER_INVALID` / `POOL_NOTE_INVALID` / `POOL_PROGRESS_INVALID` / `POOL_DUPLICATE_ID` / `POOL_NOT_FOUND`。
 
 ## 4. 页面与 DOM 契约
 
@@ -340,7 +361,10 @@ store 方法：`addItem` / `updateItem` / `deleteItem` / `listItems` / `listByTi
 | `[data-attention-switch-open="<id>"]` | 选项主按钮；有链接新标签页打开，无链接展开详情 |
 | `[data-attention-switch-edit="<id>"]` / `[data-attention-switch-delete="<id>"]` | 编辑 / 两步删除（删除确认时 `data-armed="true"`） |
 | `[data-attention-switch-add-toggle]` / `[data-attention-switch-import-toggle]` | 「录入」/ 「从清单加入」开关 |
-| `[data-attention-switch-form]` / `[data-attention-switch-input]` | 录入 / 编辑表单与其字段（`title` / `url` / `source` / `tier` / `note`） |
+| `[data-attention-switch-progress="<id>"]` | 条目进度循环按钮；`data-progress` 为当前档（`none` / `todo` / `partial` / `done`），点击按「未跟踪 → 待完成 → 部分完成 → 完成 → 未跟踪」循环 |
+| `[data-attention-switch-feedback-toggle]` / `[data-attention-switch-feedback-close]` | 「反馈」视图开关 / 返回选项 |
+| `[data-attention-switch-feedback]` | 反馈视图根（总览卡片、沉睡条目、进度停滞、最近记录） |
+| `[data-attention-switch-form]` / `[data-attention-switch-input]` | 录入 / 编辑表单与其字段（`title` / `url` / `source` / `tier` / `note` / `progress`） |
 | `[data-attention-switch-import-row]` / `[data-attention-switch-import-pick="<id>"]` | 从清单加入的任务行与入池按钮 |
 | `[data-attention-switch-live]` | 蓄水池面板的 `aria-live="polite"` 播报区域 |
 | `[data-month-review]` | 月视图逾期回顾横幅（主干渲染，可用 `[data-task-toggle]` 切换状态） |
@@ -388,8 +412,10 @@ store 方法：`addItem` / `updateItem` / `deleteItem` / `listItems` / `listByTi
 - 入口常驻顶栏（任何视图可用）；面板为模态层，`role="dialog"`。
 - 点入口开面板；关闭按钮 / 背景 / `Escape` 关面板，焦点回入口按钮。`Escape` 依次收起表单 / 导入列表 / 面板。
 - 三档切换显示该档选项（缺省 5 个）；有链接的选项点击新标签页打开并标记取用（排序置后）；无链接的展开详情。
-- 三种录入形式：面板表单、`window.schedule.pool.add`、本地内容文件的 `pool` 键；修改 / 删除只存当前会话，刷新回本地初值。
+- 三种录入形式：面板表单、`window.schedule.pool.add`、本地内容文件的 `pool` 键；修改 / 删除只存当前会话，刷新回本地初值（进度例外，见下）。
 - 「从清单加入」只读 `services.inbox` 的任务列表；单向联动，池内容不回写清单。
+- **条目进度**：每个选项行有进度按钮（未跟踪 / 待完成 / 部分完成 / 完成），点击循环；录入 / 编辑表单内也可选进度。进度写本机覆盖层，刷新不丢。
+- **反馈视图**：操作区「反馈」按钮打开（与三档并列，零主干登记）：总览（条目数 / 跟踪进度的分布 / 完成率）、近 7 日取用（次数 / 涉及条目 / 档位分布）、沉睡条目（入池以来无取用）、进度停滞（部分完成且近 7 日无取用）、最近记录（最近 10 条）。`Escape` 依次收起表单 / 导入列表 / 反馈视图 / 关闭面板。
 - 面板打开时，方向键 / `T` / `M` / `W` / `D` 不驱动日历导航。
 - 校验失败时表单保持打开，错误信息 `role="alert"`，标题框获焦点。
 
@@ -479,13 +505,17 @@ interface DailyTasksService {
 
 ```ts
 interface PoolService {
-  addItem(input: { id?: string; title: string; url?: string; source: PoolSource; tiers: PoolTier[]; note?: string }): PoolItem;
-  updateItem(id: string, changes: { title?: string; url?: string; source?: PoolSource; tiers?: PoolTier[]; note?: string }): PoolItem;
+  addItem(input: { id?: string; title: string; url?: string; source: PoolSource; tiers: PoolTier[]; note?: string; progress?: PoolProgress }): PoolItem;
+  updateItem(id: string, changes: { title?: string; url?: string; source?: PoolSource; tiers?: PoolTier[]; note?: string; progress?: PoolProgress }): PoolItem;
   deleteItem(id: string): PoolItem;
   listItems(): PoolItem[];
   listByTier(tier: PoolTier): PoolItem[];
   optionsFor(tier: PoolTier, count?: number): PoolItem[];
-  markUsed(id: string): void;
+  markUsed(id: string, options?: { kind?: 'open' | 'expand'; tier?: PoolTier }): void;
+  setItemProgress(id: string, progress?: PoolProgress): PoolItem;
+  useRecords(): PoolUseRecord[];
+  progressLog(id: string): PoolUseRecord[];
+  stats(now?: Date): ReturnType<typeof poolStats>;
   subscribe(listener: (change: object) => void): () => void;
 }
 ```
@@ -560,7 +590,7 @@ interface CalendarDataSource {
 
 ### 5.3 dsh 输入接口
 
-`app.js` 暴露只读命名空间 `window.schedule`（`version: '0.8'`），包含任务、每日任务与蓄水池三个运行时接口：
+`app.js` 暴露只读命名空间 `window.schedule`（`version: '0.9'`），包含任务、每日任务与蓄水池三个运行时接口：
 
 ```js
 // 任务：清单 / 日 / 周 / 月共用
@@ -592,17 +622,21 @@ window.schedule.dailyTasks.toggle('daily-01', '2026-11-06');
 window.schedule.dailyTasks.setStatus('daily-01', 'done', '2026-11-06');
 window.schedule.dailyTasks.getStatus('daily-01', '2026-11-06');
 
-// 蓄水池：当前页面会话内
+// 蓄水池：条目增删在当前页面会话；进度与取用记录落本机 localStorage
 window.schedule.pool.add({
   title: '线性代数网课',
   url: 'https://www.bilibili.com/video/BV1xx',
   source: 'course',                 // course | paper | web | work | chore
   tiers: ['deep', 'leisure'],       // 至少一个；leisure | browse | deep
   note: '看到第 3 讲',               // 可选
+  progress: 'partial',              // 可选：todo | partial | done
 });
 window.schedule.pool.list();
-// [{ id, title, url, source, tiers, note, createdAt }, ...]
+// [{ id, title, url, source, tiers, note, createdAt, progress?, progressUpdatedAt? }, ...]
 window.schedule.pool.remove('pool-01');
+window.schedule.pool.setProgress({ id: 'pool-01', progress: 'done' }); // progress 省略 = 不再跟踪
+window.schedule.pool.stats();       // 反馈统计（poolStats）
+window.schedule.pool.records();     // 最近 500 条取用 / 进度记录
 ```
 
 - `tasks.*` 等价于 `services.inbox` 的对应方法；`dailyTasks.*` 等价于 `services.dailyTasks` 的对应方法；返回值都是数据副本。
@@ -613,7 +647,7 @@ window.schedule.pool.remove('pool-01');
 
 ## 6. 版本与兼容
 
-- 当前接口版本 `0.8`；0.2 增量加入 `DailyTask`、`DailyTasksService`、`window.schedule.dailyTasks` 与每日任务 DOM；0.3 增量加入清单 / 便签 CRUD、任务可选时间字段与日视图时间表派生事件；0.4 增量加入任务可选 `due` 截止日期与行内展示；0.5 增量加入周图模块、月 / 周 / 日任务统一、任务可选 `id`、`window.schedule.tasks`、本地内容文件与机制层交接约定；0.6 增量加入「当日计划 / 收集区」分区与日进度口径、周 / 月逾期回顾区、全天任务（`date` 不带时间）、`due ≥ date` 写入校验、共享任务日期映射（`taskWindow` / `taskDayEntry` / `taskReviewGroups`）与 `listUnscheduledTasks()`；0.7 增量加入蓄水池（`PoolItem` / `PoolService` / `window.schedule.pool`、顶栏常驻入口与面板选择器、本地内容可选 `pool` 键）；0.8 增量加入月视图跨天长条（`monthSpanBars` 纯函数、`[data-month-span-bar]` 选择器，跨天任务从「首尾两个 chip」改为「一条按周行裁剪的长条」；长条与日格同网格显式占位、周行高度 `minmax(72px, auto)` 按内容动态延伸并在放不下时内部滚动，chip 与「+N 项」始终完整）。已发布字段与稳定选择器保持不变。
+- 当前接口版本 `0.8`；0.2 增量加入 `DailyTask`、`DailyTasksService`、`window.schedule.dailyTasks` 与每日任务 DOM；0.3 增量加入清单 / 便签 CRUD、任务可选时间字段与日视图时间表派生事件；0.4 增量加入任务可选 `due` 截止日期与行内展示；0.5 增量加入周图模块、月 / 周 / 日任务统一、任务可选 `id`、`window.schedule.tasks`、本地内容文件与机制层交接约定；0.6 增量加入「当日计划 / 收集区」分区与日进度口径、周 / 月逾期回顾区、全天任务（`date` 不带时间）、`due ≥ date` 写入校验、共享任务日期映射（`taskWindow` / `taskDayEntry` / `taskReviewGroups`）与 `listUnscheduledTasks()`；0.7 增量加入蓄水池（`PoolItem` / `PoolService` / `window.schedule.pool`、顶栏常驻入口与面板选择器、本地内容可选 `pool` 键）；0.8 增量加入月视图跨天长条（`monthSpanBars` 纯函数、`[data-month-span-bar]` 选择器，跨天任务从「首尾两个 chip」改为「一条按周行裁剪的长条」；长条与日格同网格显式占位、周行高度 `minmax(72px, auto)` 按内容动态延伸并在放不下时内部滚动，chip 与「+N 项」始终完整）；0.9 增量加入蓄水池进度与反馈追踪（`PoolItem.progress` / `progressUpdatedAt`、`PoolUseRecord`、`setItemProgress` / `useRecords` / `progressLog` / `stats`、`poolStats` 纯函数、`window.schedule.pool.setProgress / stats / records`、进度与反馈选择器，进度与记录存本机 localStorage）与「纸质统一」美工（全局令牌改暖纸语言：`--font-display` 衬线标题、语义色 `--d-*` 提升到 `:root`、日程色块改大地色系）。已发布字段与稳定选择器保持不变（新增字段全部可选）。
 - 0.6 的行为变化（需在 PR / 迁移说明中告知）：① 日视图「清单」不再展示全部任务，只展示当日计划 + 收集区；② `updateTask` 清空 `start` / `duration` 从「解绑日期」变为「变为全天任务」，解绑需显式 `date: ''`；③ `addTask({ date })` 不再静默忽略日期，而是创建全天任务；④ `due` 早于 `date` 的写入抛 `INBOX_TASK_DUE_INVALID`。
 - 新增字段必须可选，渲染层对未知可选字段保持忽略。
 - 颜色 / 图标 / 状态枚举新增时，需要同时补样式与回退；删除或重命名属于 breaking change。
