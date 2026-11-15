@@ -269,8 +269,8 @@ src/modules/inbox/
 
 ```
 src/modules/attention-switch/
-  index.js        mount(context)：顶栏常驻入口 + 蓄水池面板（三档选项 / 收录 / 从清单加入）
-  store.js        纯逻辑：PoolItem 校验、分档、选取、会话内取用标记
+  index.js        mount(context)：顶栏常驻入口 + 蓄水池面板（三档选项 / 收录 / 从清单加入 / 进度 / 反馈视图）
+  store.js        纯逻辑：PoolItem 校验、分档、选取、会话内取用标记、条目进度、取用/进度记录、反馈统计
   styles.css      .mod-attention-switch-* 样式，index.html 中一行 <link> 加载
   __tests__/      node:test
   README.md       接口、不变量、三种收录形式、注册点
@@ -280,12 +280,12 @@ src/modules/attention-switch/
 
 主干接入点：
 
-- `src/app.js`：引入模块、`createPoolStore(seed.pool)`、传入 `services.pool`（模块只读 `services.inbox`）、入口点击 / 关闭事件控制可见性、面板打开时屏蔽日历方向键、`window.schedule.pool`。
+- `src/app.js`：引入模块、`createPoolStore(seed.pool, { storage })`（storage 为 localStorage 适配器，进度与记录落本机）、传入 `services.pool`（模块只读 `services.inbox`）、入口点击 / 关闭事件控制可见性、面板打开时屏蔽日历方向键、`window.schedule.pool`（含 `setProgress` / `stats` / `records`）。
 - `index.html`：顶栏 `.topbar-right` 包裹视图切换 + `<button data-pool-toggle>`；`#view-root` 之后一行 `<div data-module-root="attention-switch" hidden>`；一行模块样式 `<link>`。
 - `src/data.js`：`samplePool`（空数组）+ `pickSeedData` 可选 `pool` 键。
 - `assets/styles.css`：`.topbar-right` / `.pool-entry` 两条顶栏样式。
 
-录入三种形式：面板表单、`window.schedule.pool.add`（会话内）、`local/schedule.json` 的 `pool` 键（刷新后仍在）。刷新后回到本地文件 / 空白初值，与其它模块一致。
+录入三种形式：面板表单、`window.schedule.pool.add`（会话内）、`local/schedule.json` 的 `pool` 键（刷新后仍在）。条目增改删刷新后回到本地文件 / 空白初值，与其它模块一致；**条目进度与取用 / 进度记录例外**——存本机 localStorage（`schedule.pool.progress.v1` / `schedule.pool.records.v1`，记录上限 500 条），刷新不丢，也不出本机。
 
 ### 3.7 新模块接入演练（示例）
 

@@ -4,11 +4,14 @@ import assert from 'node:assert/strict';
 import {
   POOL_DEFAULT_OPTION_COUNT,
   POOL_NOTE_MAX_LENGTH,
+  POOL_RECORD_LIMIT,
   POOL_SOURCES,
   POOL_TIERS,
   POOL_TITLE_MAX_LENGTH,
   createPoolStore,
+  nextPoolProgress,
   normalizePoolItem,
+  poolStats,
 } from '../store.js';
 
 const fixedNow = () => new Date(2026, 10, 9); // 2026-11-09 local
@@ -212,4 +215,223 @@ test('createPoolStore skips broken and duplicate seeds and accepts a non-array s
 test('pool enums cover the agreed sources and tiers', () => {
   assert.deepEqual(POOL_SOURCES, ['course', 'paper', 'web', 'work', 'chore']);
   assert.deepEqual(POOL_TIERS, ['leisure', 'browse', 'deep']);
+});
+
+/* ---- 第二迭代（方案 B）：进度 + 记录 + 反馈统计 ----------------------- */
+
+function memoryStorage(seed = {}) {
+  const map = new Map(Object.entries(seed));
+  return {
+    map,
+    getItem(key) {
+      return map.has(key) ? map.get(key) : null;
+    },
+    setItem(key, value) {
+      map.set(key, value);
+    },
+  };
+}
+
+function dayAt(offset) {
+  const base = new Date(2026, 10, 15, 12, 0);
+  base.setDate(base.getDate() + offset);
+  return base;
+}
+
+test('nextPoolProgress cycles through untracked and the three states', () => {
+  assert.equal(nextPoolProgress(undefined), 'todo');
+  assert.equal(nextPoolProgress('todo'), 'partial');
+  assert.equal(nextPoolProgress('partial'), 'done');
+  assert.equal(nextPoolProgress('done'), undefined);
+});
+
+test('normalizePoolItem validates progress and defaults progressUpdatedAt', () => {
+  const item = normalizePoolItem(sampleInput({ progress: 'partial' }), { now: fixedNow });
+  assert.equal(item.progress, 'partial');
+  assert.equal(item.progressUpdatedAt, '2026-11-09');
+
+  const plain = normalizePoolItem(sampleInput(), { now: fixedNow });
+  assert.equal(plain.progress, undefined);
+  assert.equal(plain.progressUpdatedAt, undefined);
+
+  assert.throws(() => normalizePoolItem(sampleInput({ progress: 'nope' })), {
+    code: 'POOL_PROGRESS_INVALID',
+  });
+  assert.throws(() => normalizePoolItem(sampleInput({ progress: 'done', progressUpdatedAt: 'x' })), {
+    code: 'POOL_PROGRESS_INVALID',
+  });
+  assert.equal(
+    normalizePoolItem(sampleInput({ progress: 'done', progressUpdatedAt: '2026-11-01' })).progressUpdatedAt,
+    '2026-11-01'
+  );
+});
+
+test('setItemProgress cycles, records from/to and persists through storage', () => {
+  const storage = memoryStorage();
+  const store = createPoolStore([sampleInput({ id: 'p1' })], { storage, now: fixedNow });
+
+  const partial = store.setItemProgress('p1', 'partial');
+  assert.equal(partial.progress, 'partial');
+  assert.equal(partial.progressUpdatedAt, '2026-11-09');
+
+  const done = store.setItemProgress('p1', 'done');
+  assert.equal(done.progress, 'done');
+
+  const cleared = store.setItemProgress('p1', undefined);
+  assert.equal(cleared.progress, undefined);
+  assert.equal(cleared.progressUpdatedAt, undefined);
+
+  const log = store.progressLog('p1');
+  assert.deepEqual(
+    log.map((record) => [record.kind, record.from, record.to]),
+    [
+      ['progress', null, 'partial'],
+      ['progress', 'partial', 'done'],
+      ['progress', 'done', null],
+    ]
+  );
+
+  const persisted = JSON.parse(storage.getItem('schedule.pool.progress.v1'));
+  assert.deepEqual(persisted, {});
+  assert.equal(JSON.parse(storage.getItem('schedule.pool.records.v1')).length, 3);
+
+  assert.throws(() => store.setItemProgress('p1', 'nope'), { code: 'POOL_PROGRESS_INVALID' });
+  assert.throws(() => store.setItemProgress('missing', 'todo'), { code: 'POOL_NOT_FOUND' });
+});
+
+test('stored progress overlay wins over the seed and survives a reload', () => {
+  const storage = memoryStorage({
+    'schedule.pool.progress.v1': JSON.stringify({
+      p1: { progress: 'done', progressUpdatedAt: '2026-11-10' },
+    }),
+  });
+  const store = createPoolStore([sampleInput({ id: 'p1' })], { storage, now: fixedNow });
+  const [item] = store.listItems();
+  assert.equal(item.progress, 'done');
+  assert.equal(item.progressUpdatedAt, '2026-11-10');
+
+  // 新条目（没有覆盖层）保持不跟踪
+  const added = store.addItem(sampleInput({ id: 'p2', title: '另一条' }));
+  assert.equal(added.progress, undefined);
+  const overlay = JSON.parse(storage.getItem('schedule.pool.progress.v1'));
+  assert.deepEqual(overlay, { p1: { progress: 'done', progressUpdatedAt: '2026-11-10' } });
+});
+
+test('markUsed records open/expand usage with tier and source', () => {
+  const storage = memoryStorage();
+  const store = createPoolStore([sampleInput({ id: 'p1', tiers: ['deep', 'browse'] })], {
+    storage,
+    now: fixedNow,
+  });
+  store.markUsed('p1', { kind: 'open', tier: 'deep' });
+  store.markUsed('p1', { kind: 'expand' }); // tier 缺省取第一条
+  const records = store.useRecords();
+  assert.deepEqual(
+    records.map((record) => [record.kind, record.tier, record.source]),
+    [
+      ['open', 'deep', 'course'],
+      ['expand', 'deep', 'course'],
+    ]
+  );
+});
+
+test('records are capped at the limit and corrupt storage is tolerated', () => {
+  const storage = memoryStorage();
+  const store = createPoolStore([sampleInput({ id: 'p1' })], { storage, now: fixedNow });
+  for (let i = 0; i < POOL_RECORD_LIMIT + 5; i += 1) {
+    store.markUsed('p1', { kind: 'open', tier: 'deep' });
+  }
+  assert.equal(store.useRecords().length, POOL_RECORD_LIMIT);
+  assert.equal(JSON.parse(storage.getItem('schedule.pool.records.v1')).length, POOL_RECORD_LIMIT);
+
+  const broken = memoryStorage({ 'schedule.pool.records.v1': 'not-json' });
+  const tolerant = createPoolStore([sampleInput({ id: 'p1' })], { storage: broken });
+  assert.deepEqual(tolerant.useRecords(), []);
+
+  const throwing = {
+    getItem() {
+      throw new Error('blocked');
+    },
+    setItem() {
+      throw new Error('blocked');
+    },
+  };
+  const quiet = createPoolStore([sampleInput({ id: 'p1' })], { storage: throwing, now: fixedNow });
+  quiet.markUsed('p1', { kind: 'open', tier: 'deep' });
+  quiet.setItemProgress('p1', 'todo');
+  assert.equal(quiet.useRecords().length, 2);
+});
+
+test('poolStats reports distributions, week usage, dormant and stale items', () => {
+  const items = [
+    { id: 'a', title: 'A', source: 'course', tiers: ['deep'], progress: 'done', createdAt: '2026-11-01' },
+    { id: 'b', title: 'B', source: 'work', tiers: ['browse'], progress: 'partial', createdAt: '2026-11-02' },
+    { id: 'c', title: 'C', source: 'chore', tiers: ['leisure'], createdAt: '2026-11-03' },
+  ];
+  const records = [
+    { at: '2026-11-14 09:00', kind: 'open', tier: 'deep', itemId: 'a', source: 'course' },
+    { at: '2026-11-15 10:00', kind: 'expand', tier: 'browse', itemId: 'b', source: 'work' },
+    { at: '2026-11-08 10:00', kind: 'open', tier: 'leisure', itemId: 'c', source: 'chore' }, // 7 天窗外
+    { at: '2026-11-15 11:00', kind: 'progress', tier: 'browse', itemId: 'b', source: 'work', from: null, to: 'partial' },
+    { broken: true },
+  ];
+  const stats = poolStats(items, records, dayAt(0));
+  assert.equal(stats.total, 3);
+  assert.deepEqual(stats.byProgress, { todo: 0, partial: 1, done: 1 });
+  assert.equal(stats.untracked, 1);
+  assert.equal(stats.used7d, 2);
+  assert.equal(stats.used7dItems, 2);
+  assert.deepEqual(stats.used7dByTier, { deep: 1, browse: 1 });
+  assert.deepEqual(stats.dormant.map((item) => item.id), []);
+  assert.deepEqual(stats.stalePartial.map((item) => item.id), []); // b 今天用过
+  assert.equal(stats.doneRatio, 1 / 2);
+  assert.equal(stats.byTier.deep, 1);
+  assert.equal(stats.bySource.work, 1);
+});
+
+test('poolStats handles the week boundary, dormant and stale partial items', () => {
+  const items = [
+    { id: 'a', title: 'A', source: 'course', tiers: ['deep'], progress: 'partial', createdAt: '2026-11-01' },
+    { id: 'b', title: 'B', source: 'course', tiers: ['deep'], createdAt: '2026-11-01' },
+    { id: 'c', title: 'C', source: 'course', tiers: ['deep'], createdAt: '2026-11-01' },
+  ];
+  const records = [
+    { at: '2026-11-09 08:00', kind: 'open', tier: 'deep', itemId: 'a', source: 'course' }, // 窗内最早一天（today-6）
+    { at: '2026-11-08 08:00', kind: 'open', tier: 'deep', itemId: 'b', source: 'course' }, // 窗外（today-7）
+  ];
+  const stats = poolStats(items, records, dayAt(0));
+  assert.equal(stats.used7d, 1); // 只有 11-09 在窗内
+  assert.deepEqual(stats.dormant.map((item) => item.id), ['c']);
+  assert.deepEqual(stats.stalePartial.map((item) => item.id), []); // a 在窗内用过
+  assert.equal(stats.doneRatio, 0);
+
+  const later = poolStats(items, records, dayAt(1)); // 今天 +1：11-09 出窗
+  assert.deepEqual(later.stalePartial.map((item) => item.id), ['a']);
+  assert.equal(later.used7d, 0);
+});
+
+test('poolStats on an empty pool stays defined', () => {
+  const stats = poolStats([], [], dayAt(0));
+  assert.equal(stats.total, 0);
+  assert.equal(stats.used7d, 0);
+  assert.equal(stats.doneRatio, 0);
+  assert.deepEqual(stats.dormant, []);
+  assert.deepEqual(stats.stalePartial, []);
+});
+
+test('store.stats and updateItem round-trip progress', () => {
+  const storage = memoryStorage();
+  const store = createPoolStore([sampleInput({ id: 'p1', progress: 'todo' })], {
+    storage,
+    now: fixedNow,
+  });
+  store.markUsed('p1', { kind: 'open', tier: 'deep' });
+  const stats = store.stats(fixedNow());
+  assert.equal(stats.total, 1);
+  assert.equal(stats.byProgress.todo, 1);
+
+  const updated = store.updateItem('p1', { progress: 'partial' });
+  assert.equal(updated.progress, 'partial');
+  assert.equal(updated.progressUpdatedAt, '2026-11-09');
+  assert.equal(store.updateItem('p1', { title: '新标题' }).progress, 'partial'); // 编辑不清进度
 });

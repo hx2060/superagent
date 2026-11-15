@@ -31,14 +31,19 @@ export {
 
 import {
   POOL_DEFAULT_OPTION_COUNT,
+  POOL_PROGRESS_LABELS,
+  POOL_PROGRESS_STATES,
   POOL_SOURCE_LABELS,
   POOL_TIER_LABELS,
   POOL_TIERS,
+  nextPoolProgress,
 } from './store.js';
 
 const CLOSE_EVENT = 'attention-switch:close';
 const OPENED_EVENT = 'attention-switch:opened';
 const DEFAULT_TIER = 'browse';
+const PROGRESS_NONE_LABEL = '未跟踪';
+const RECENT_RECORD_COUNT = 10;
 
 function escapeHtml(value) {
   return String(value).replace(/[&<>"']/g, (character) => {
@@ -66,7 +71,11 @@ function scheduleFrame(callback) {
 }
 
 function emptyDraft() {
-  return { title: '', url: '', source: 'course', tiers: [], note: '' };
+  return { title: '', url: '', source: 'course', tiers: [], note: '', progress: '' };
+}
+
+function progressLabel(progress) {
+  return POOL_PROGRESS_STATES.includes(progress) ? POOL_PROGRESS_LABELS[progress] : PROGRESS_NONE_LABEL;
 }
 
 /**
@@ -88,9 +97,10 @@ export function mount(context) {
   root.classList.add('mod-attention-switch-slot');
 
   let selectedTier = DEFAULT_TIER;
-  /** @type {{ mode: 'add'|'edit', id?: string, draft: { title: string, url: string, source: string, tiers: string[], note: string }, error: string } | null} */
+  /** @type {{ mode: 'add'|'edit', id?: string, draft: { title: string, url: string, source: string, tiers: string[], note: string, progress: string }, error: string } | null} */
   let form = null;
   let importOpen = false;
+  let feedbackOpen = false;
   let expandedId = null;
   let deleteArmedId = null;
   let announcement = '';
@@ -182,6 +192,13 @@ export function mount(context) {
         }
       </div>
       <div class="mod-attention-switch-option-actions">
+        <button
+          type="button"
+          class="mod-attention-switch-action mod-attention-switch-progress"
+          data-attention-switch-progress="${id}"
+          data-progress="${item.progress ?? 'none'}"
+          title="切换进度：未跟踪 → 待完成 → 部分完成 → 完成"
+        >${escapeHtml(progressLabel(item.progress))}</button>
         <button type="button" class="mod-attention-switch-action" data-attention-switch-edit="${id}">编辑</button>
         <button
           type="button"
@@ -205,6 +222,67 @@ export function mount(context) {
           ? `<p class="mod-attention-switch-more">这一档共 ${total} 条，先看这 ${options.length} 条；用过的会排到后面。</p>`
           : ''
       }`;
+  }
+
+  function renderFeedback() {
+    const stats = pool.stats();
+    const items = pool.listItems();
+    const titleOf = (id) => items.find((entry) => entry.id === id)?.title ?? id;
+    const records = pool.useRecords().slice(-RECENT_RECORD_COUNT).reverse();
+    const tracked = stats.byProgress.todo + stats.byProgress.partial + stats.byProgress.done;
+    const ratio = Math.round(stats.doneRatio * 100);
+    const tierLine = POOL_TIERS.filter((tier) => stats.used7dByTier[tier])
+      .map((tier) => `${POOL_TIER_LABELS[tier]} ${stats.used7dByTier[tier]}`)
+      .join(' · ');
+
+    const list = (entries, emptyText) =>
+      entries.length
+        ? `<ul class="mod-attention-switch-feedback-list">${entries
+            .map(
+              (entry) =>
+                `<li>${escapeHtml(entry.title)}${
+                  entry.progress ? ` · ${escapeHtml(POOL_PROGRESS_LABELS[entry.progress])}` : ''
+                }</li>`
+            )
+            .join('')}</ul>`
+        : `<p class="mod-attention-switch-feedback-empty">${emptyText}</p>`;
+
+    return `<section class="mod-attention-switch-feedback" data-attention-switch-feedback>
+      <header class="mod-attention-switch-feedback-head">
+        <h3 class="mod-attention-switch-feedback-title">反馈</h3>
+        <button type="button" class="mod-attention-switch-action" data-attention-switch-feedback-close>返回选项</button>
+      </header>
+      <div class="mod-attention-switch-feedback-cards">
+        <p class="mod-attention-switch-feedback-card">共 <b>${stats.total}</b> 条 · 跟踪进度 <b>${tracked}</b> 条（待完成 ${stats.byProgress.todo} · 部分完成 ${stats.byProgress.partial} · 完成 ${stats.byProgress.done}）· 完成率 <b>${ratio}%</b></p>
+        <p class="mod-attention-switch-feedback-card">近 7 日取用 <b>${stats.used7d}</b> 次 · 涉及 <b>${stats.used7dItems}</b> 条${tierLine ? `（${tierLine}）` : ''}</p>
+      </div>
+      <section class="mod-attention-switch-feedback-block">
+        <h4>沉睡条目（入池以来没有取用过）</h4>
+        ${list(stats.dormant, '没有沉睡条目，池子都在被用。')}
+      </section>
+      <section class="mod-attention-switch-feedback-block">
+        <h4>进度停滞（部分完成且近 7 日无取用）</h4>
+        ${list(stats.stalePartial, '没有停滞的进度。')}
+      </section>
+      <section class="mod-attention-switch-feedback-block">
+        <h4>最近记录</h4>
+        ${
+          records.length
+            ? `<ul class="mod-attention-switch-feedback-list mod-attention-switch-feedback-list--records">${records
+                .map((record) => {
+                  const kindLabel =
+                    record.kind === 'open' ? '打开' : record.kind === 'expand' ? '展开' : '进度';
+                  const detail =
+                    record.kind === 'progress'
+                      ? `${progressLabel(record.from)} → ${progressLabel(record.to)}`
+                      : POOL_TIER_LABELS[record.tier] ?? record.tier;
+                  return `<li><span class="mod-attention-switch-feedback-at">${escapeHtml(record.at)}</span> ${kindLabel}「${escapeHtml(titleOf(record.itemId))}」· ${escapeHtml(detail)}</li>`;
+                })
+                .join('')}</ul>`
+            : '<p class="mod-attention-switch-feedback-empty">还没有记录。</p>'
+        }
+      </section>
+    </section>`;
   }
 
   function renderForm() {
@@ -261,6 +339,16 @@ export function mount(context) {
           </label>`
         ).join('')}
       </fieldset>
+      <label class="mod-attention-switch-field">
+        <span>进度</span>
+        <select data-attention-switch-input="progress" name="progress">
+          <option value=""${draft.progress ? '' : ' selected'}>不跟踪</option>
+          ${POOL_PROGRESS_STATES.map(
+            (state) =>
+              `<option value="${state}"${draft.progress === state ? ' selected' : ''}>${escapeHtml(POOL_PROGRESS_LABELS[state])}</option>`
+          ).join('')}
+        </select>
+      </label>
       <label class="mod-attention-switch-field mod-attention-switch-field--note">
         <span>备注（可留空）</span>
         <textarea
@@ -309,11 +397,12 @@ export function mount(context) {
           <button type="button" class="mod-attention-switch-close" data-attention-switch-close aria-label="关闭蓄水池">✕</button>
         </header>
         <p class="mod-attention-switch-lead">选一个你现在的状态，从池子里挑一个去处。</p>
-        ${renderTierTabs()}
-        ${renderOptions()}
+        ${feedbackOpen ? '' : renderTierTabs()}
+        ${feedbackOpen ? renderFeedback() : renderOptions()}
         <div class="mod-attention-switch-actions">
           <button type="button" class="mod-attention-switch-add" data-attention-switch-add-toggle aria-expanded="${form ? 'true' : 'false'}">${form ? '收起收录' : '＋ 收录'}</button>
           <button type="button" class="mod-attention-switch-add" data-attention-switch-import-toggle aria-expanded="${importOpen ? 'true' : 'false'}">${importOpen ? '收起清单' : '从清单加入'}</button>
+          <button type="button" class="mod-attention-switch-add" data-attention-switch-feedback-toggle aria-expanded="${feedbackOpen ? 'true' : 'false'}">${feedbackOpen ? '收起反馈' : '反馈'}</button>
         </div>
         ${renderForm()}
         ${renderImport()}
@@ -343,11 +432,13 @@ export function mount(context) {
             source: item.source,
             tiers: Array.isArray(item.tiers) ? [...item.tiers] : [],
             note: item.note ?? '',
+            progress: item.progress ?? '',
           }
         : emptyDraft(),
       error: '',
     };
     importOpen = false;
+    feedbackOpen = false;
     expandedId = null;
     deleteArmedId = null;
     focusTitle = true;
@@ -365,10 +456,11 @@ export function mount(context) {
     const url = formEl.querySelector('[data-attention-switch-input="url"]')?.value ?? '';
     const source = formEl.querySelector('[data-attention-switch-input="source"]')?.value ?? '';
     const note = formEl.querySelector('[data-attention-switch-input="note"]')?.value ?? '';
+    const progress = formEl.querySelector('[data-attention-switch-input="progress"]')?.value ?? '';
     const tiers = [...formEl.querySelectorAll('[data-attention-switch-input="tier"]:checked')].map(
       (box) => box.value
     );
-    return { title, url, source, tiers, note };
+    return { title, url, source, tiers, note, progress };
   }
 
   function handleClick(event) {
@@ -394,13 +486,46 @@ export function mount(context) {
       if (!item) return;
       if (item.url) {
         window.open(item.url, '_blank', 'noopener');
-        pool.markUsed(id);
+        pool.markUsed(id, { kind: 'open', tier: selectedTier });
         announce(`已打开「${item.title}」`);
       } else {
-        expandedId = expandedId === id ? null : id;
-        announce(expandedId ? `展开「${item.title}」` : `收起「${item.title}」`);
+        const willExpand = expandedId !== id;
+        expandedId = willExpand ? id : null;
+        if (willExpand) pool.markUsed(id, { kind: 'expand', tier: selectedTier });
+        announce(willExpand ? `展开「${item.title}」` : `收起「${item.title}」`);
         render();
       }
+      return;
+    }
+
+    const progressButton = event.target.closest('[data-attention-switch-progress]');
+    if (progressButton) {
+      const id = progressButton.dataset.attentionSwitchProgress;
+      const item = pool.listItems().find((entry) => entry.id === id);
+      if (!item) return;
+      const next = nextPoolProgress(item.progress);
+      const updated = pool.setItemProgress(id, next);
+      announce(
+        next
+          ? `「${updated.title}」进度设为${POOL_PROGRESS_LABELS[next]}`
+          : `「${updated.title}」不再跟踪进度`
+      );
+      return;
+    }
+
+    const feedbackToggle = event.target.closest('[data-attention-switch-feedback-toggle]');
+    if (feedbackToggle) {
+      feedbackOpen = !feedbackOpen;
+      form = null;
+      importOpen = false;
+      render();
+      return;
+    }
+
+    const feedbackClose = event.target.closest('[data-attention-switch-feedback-close]');
+    if (feedbackClose) {
+      feedbackOpen = false;
+      render();
       return;
     }
 
@@ -465,15 +590,16 @@ export function mount(context) {
     event.preventDefault();
 
     const draft = readDraft(formEl);
+    const payload = { ...draft, progress: draft.progress || undefined };
     try {
       if (form?.mode === 'edit' && form.id) {
-        const updated = pool.updateItem(form.id, draft);
+        const updated = pool.updateItem(form.id, payload);
         form = null;
         announce(`已保存「${updated.title}」`);
         focusOptionId = updated.id;
         render();
       } else {
-        const added = pool.addItem(draft);
+        const added = pool.addItem(payload);
         form = null;
         announce(`已加入「${added.title}」`);
         focusOptionId = added.id;
@@ -501,6 +627,9 @@ export function mount(context) {
   function handleInput(event) {
     const field = event.target.closest?.('[data-attention-switch-input]');
     if (!field || !form) return;
+    if (field.dataset.attentionSwitchInput === 'progress') {
+      form.draft.progress = field.value;
+    }
     if (field.dataset.attentionSwitchInput === 'tier') {
       const tier = field.value;
       form.draft.tiers = field.checked
@@ -519,6 +648,9 @@ export function mount(context) {
         closeForm();
       } else if (importOpen) {
         importOpen = false;
+        render();
+      } else if (feedbackOpen) {
+        feedbackOpen = false;
         render();
       } else {
         requestClose();
