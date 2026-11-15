@@ -15,10 +15,10 @@
   align-items: center;
   gap: 8px 10px;
   padding: 6px 12px;
-  border: 1px solid rgba(221, 179, 169, 0.38);
+  border: 1px solid rgba(120, 100, 70, 0.18);
   border-radius: 14px;
-  background: rgba(255, 253, 251, 0.78);
-  box-shadow: 0 6px 18px rgba(150, 92, 80, 0.05);
+  background: rgba(253, 250, 243, 0.78);
+  box-shadow: 0 6px 18px rgba(80, 64, 40, 0.05);
 }
 
 .mod-daily-tasks-head {
@@ -33,7 +33,7 @@
   align-items: center;
   gap: 7px;
   margin: 0;
-  color: #241d1b;
+  color: #2a2419;
   font-size: 13px;
   font-weight: 650;
   letter-spacing: 0.01em;
@@ -43,12 +43,12 @@
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: #ef8f86;
-  box-shadow: 0 0 0 3px rgba(239, 143, 134, 0.16);
+  background: #c08a5a;
+  box-shadow: 0 0 0 3px rgba(192, 138, 90, 0.18);
 }
 
 .mod-daily-tasks-progress {
-  color: #9a817b;
+  color: #978a72;
   font-size: 10px;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -60,14 +60,14 @@
   height: 4px;
   overflow: hidden;
   border-radius: 999px;
-  background: #f5e3de;
+  background: #eee0c8;
 }
 
 .mod-daily-tasks-track > span {
   display: block;
   height: 100%;
   border-radius: 999px;
-  background: linear-gradient(90deg, #f2a199, #e57268);
+  background: linear-gradient(90deg, #d8ae7e, #a05a2c);
   transition: width 0.2s ease;
 }
 
@@ -93,10 +93,10 @@
   align-items: center;
   gap: 6px;
   padding: 3px 8px 3px 5px;
-  border: 1px solid #f0ded8;
+  border: 1px solid #eee6d3;
   border-radius: 999px;
-  background: #fffdfb;
-  color: #2b211e;
+  background: #fdfaf3;
+  color: #2a2419;
   font: inherit;
   text-align: left;
   cursor: pointer;
@@ -104,8 +104,8 @@
 }
 
 .mod-daily-tasks-chip:hover {
-  border-color: #e8c9c2;
-  background: #fff8f5;
+  border-color: #d8c9a8;
+  background: #f8f3e8;
 }
 
 .mod-daily-tasks-chip:active {
@@ -119,7 +119,7 @@
   width: 22px;
   height: 22px;
   border-radius: 50%;
-  background: #fdf3e3;
+  background: #f6ead6;
   font-size: 11px;
   line-height: 1;
 }
@@ -141,7 +141,7 @@
 }
 
 .mod-daily-tasks-state {
-  color: #ad948d;
+  color: #a5947c;
   font-size: 9px;
   line-height: 1.2;
 }
@@ -154,9 +154,9 @@
   width: 17px;
   height: 17px;
   margin-left: 1px;
-  border: 2px solid #e8c9c2;
+  border: 2px solid #d8c9a8;
   border-radius: 50%;
-  background: #fffdfb;
+  background: #fdfaf3;
   color: #fff;
   transition: border-color 0.15s ease, background 0.15s ease;
 }
@@ -173,31 +173,31 @@
 }
 
 .mod-daily-tasks-chip[data-status="partial"] {
-  border-color: #f0c9c2;
-  background: #fff9f6;
+  border-color: #dcc39f;
+  background: #f8f3e8;
 }
 
 .mod-daily-tasks-chip[data-status="partial"] .mod-daily-tasks-state {
-  color: #b07a33;
+  color: #a9702a;
 }
 
 .mod-daily-tasks-chip[data-status="partial"] .mod-daily-tasks-check {
-  border-color: #d86e64;
-  background: conic-gradient(#ef8f86 0 50%, #fffdfb 50% 100%);
+  border-color: #a05a2c;
+  background: conic-gradient(#c08a5a 0 50%, #fdfaf3 50% 100%);
 }
 
 .mod-daily-tasks-chip[data-status="done"] {
-  border-color: #dbe8d3;
-  background: #f7faf4;
+  border-color: #dde3cc;
+  background: #f7f5ea;
 }
 
 .mod-daily-tasks-chip[data-status="done"] .mod-daily-tasks-name {
-  color: #a7948f;
+  color: #a5947c;
   text-decoration: line-through;
 }
 
 .mod-daily-tasks-chip[data-status="done"] .mod-daily-tasks-state {
-  color: #789b67;
+  color: #4f7d6f;
 }
 
 .mod-daily-tasks-chip[data-status="done"] .mod-daily-tasks-icon {
@@ -205,8 +205,8 @@
 }
 
 .mod-daily-tasks-chip[data-status="done"] .mod-daily-tasks-check {
-  border-color: #8fb97b;
-  background: #8fb97b;
+  border-color: #6f9482;
+  background: #6f9482;
 }
 
 .mod-daily-tasks-chip[data-status="done"] .mod-daily-tasks-check svg {
@@ -215,7 +215,7 @@
 
 .mod-daily-tasks-hint {
   flex: none;
-  color: #b9a39c;
+  color: #a5947c;
   font-size: 8.5px;
   letter-spacing: 0.02em;
   white-space: nowrap;
@@ -225,10 +225,10 @@
   flex: none;
   margin-left: auto;
   padding: 5px 11px;
-  border: 1px dashed #e8c9c2;
+  border: 1px dashed #d8c9a8;
   border-radius: 999px;
   background: transparent;
-  color: #b07a73;
+  color: #a05a2c;
   font-size: 10.5px;
   line-height: 1.4;
   cursor: pointer;
@@ -236,9 +236,9 @@
 }
 
 .mod-daily-tasks-add:hover {
-  border-color: #d86e64;
-  background: #fff8f5;
-  color: #b25a51;
+  border-color: #a05a2c;
+  background: #f8f3e8;
+  color: #b3402f;
 }
 
 .mod-daily-tasks-form {
@@ -258,22 +258,22 @@
   min-width: 0;
   flex: 1 1 220px;
   padding: 6px 9px;
-  border: 1px solid #ecd4cd;
+  border: 1px solid #e3d8c2;
   border-radius: 8px;
-  background: #fffdfb;
-  color: #2b211e;
+  background: #fdfaf3;
+  color: #2a2419;
   font: inherit;
   font-size: 11px;
 }
 
 .mod-daily-tasks-input::placeholder {
-  color: #c0aaa4;
+  color: #b3a48b;
 }
 
 .mod-daily-tasks-input:focus {
   outline: none;
-  border-color: #ef8f86;
-  box-shadow: 0 0 0 3px rgba(239, 143, 134, 0.16);
+  border-color: #c08a5a;
+  box-shadow: 0 0 0 3px rgba(192, 138, 90, 0.18);
 }
 
 .mod-daily-tasks-submit,
@@ -287,30 +287,30 @@
 }
 
 .mod-daily-tasks-submit {
-  border: 1px solid #e57268;
-  background: #ef8f86;
+  border: 1px solid #a05a2c;
+  background: #c08a5a;
   color: #fff;
 }
 
 .mod-daily-tasks-submit:hover {
-  background: #e57268;
+  background: #a05a2c;
 }
 
 .mod-daily-tasks-cancel {
-  border: 1px solid #ecd4cd;
+  border: 1px solid #e3d8c2;
   background: transparent;
-  color: #a58c86;
+  color: #978a72;
 }
 
 .mod-daily-tasks-cancel:hover {
-  border-color: #d8b8b0;
-  color: #8f7169;
+  border-color: #d8c9a8;
+  color: #7d6a52;
 }
 
 .mod-daily-tasks-error {
   flex: 1 1 100%;
   margin: 0;
-  color: #c94b42;
+  color: #b3402f;
   font-size: 9.5px;
 }
 
@@ -318,9 +318,9 @@
   flex: 1 1 240px;
   margin: 0;
   padding: 7px 10px;
-  border: 1px dashed #f0ded8;
+  border: 1px dashed #eee6d3;
   border-radius: 10px;
-  color: #b59b94;
+  color: #a5947c;
   font-size: 10px;
   text-align: center;
 }

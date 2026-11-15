@@ -75,10 +75,10 @@ let dailyTasksView = null;
 let weekChartView = null;
 
 const EVENT_DOT_COLORS = {
-  blue: '#3370ff',
-  teal: '#0f9b8e',
-  orange: '#e07800',
-  violet: '#7b5cf0',
+  blue: '#4a6fa5',
+  teal: '#4f7d6f',
+  orange: '#a9702a',
+  violet: '#6f5a9c',
 };
 
 const root = document.querySelector('#view-root');

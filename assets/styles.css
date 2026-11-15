@@ -1,21 +1,32 @@
 :root {
-  --bg: #eef1f6;
-  --surface: #ffffff;
-  --surface-muted: #fafbfc;
-  --text: #1f2329;
-  --text-2: #4e5561;
-  --muted: #8f959e;
-  --line: #e5e7eb;
-  --line-soft: #f0f1f4;
-  --accent: #3370ff;
-  --accent-strong: #245bdb;
-  --accent-soft: #eaf1ff;
-  --danger: #f54a45;
-  --radius-lg: 18px;
-  --radius-md: 10px;
-  --shadow-card: 0 1px 2px rgba(31, 35, 41, 0.04), 0 12px 32px rgba(31, 35, 41, 0.06);
+  /* 纸质统一（2026-11-15 需求方委托选定）：全站并入日视图原有的暖纸语言——
+     纸底、浓茶墨字、陶土主色、衬线标题；UI 正文保持无衬线。 */
+  --bg: #f6f1e7;
+  --surface: #fdfaf3;
+  --surface-muted: #f3ecdd;
+  --text: #2a2419;
+  --text-2: #574d3b;
+  --muted: #978a72;
+  --line: #e3d8c2;
+  --line-soft: #eee6d3;
+  --accent: #a05a2c;
+  --accent-strong: #8a4a22;
+  --accent-soft: #f3e3d3;
+  --danger: #b3402f;
+  --radius-lg: 6px;
+  --radius-md: 5px;
+  --shadow-card: 0 1px 1px rgba(80, 64, 40, 0.05), 0 10px 28px rgba(80, 64, 40, 0.07);
   --font: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "WenQuanYi Zen Hei", system-ui,
     -apple-system, "Segoe UI", sans-serif;
+  --font-display: Georgia, "Songti SC", "Noto Serif SC", "Source Han Serif SC", "SimSun", serif;
+  /* 日视图语义色提到 :root：月 / 周 / 日与各模块同一套口径（原先只在 .day-view
+     上定义，月视图里的引用处会落空）。 */
+  --d-ink: var(--text);
+  --d-muted: var(--muted);
+  --d-coral: #c08a5a;
+  --d-coral-deep: #a05a2c;
+  --d-line: var(--line);
+  --d-card: var(--surface);
 }
 
 * {
@@ -72,12 +83,13 @@ button {
   width: 31px;
   height: 31px;
   border-radius: 9px;
-  background: linear-gradient(150deg, #4d85ff, #245bdb);
+  background: linear-gradient(150deg, #c08a5a, #8a4a22);
   color: #fff;
-  box-shadow: 0 4px 10px rgba(51, 112, 255, 0.28);
+  box-shadow: 0 4px 10px rgba(160, 90, 44, 0.25);
 }
 
 .brand-name {
+  font-family: var(--font-display);
   font-size: 17px;
   font-weight: 600;
   letter-spacing: 0.02em;
@@ -96,7 +108,7 @@ button {
   gap: 2px;
   padding: 3px;
   border-radius: var(--radius-md);
-  background: #e3e8f0;
+  background: #e9dfc8;
 }
 
 .view-switch button {
@@ -120,7 +132,7 @@ button {
   background: var(--surface);
   color: var(--text);
   font-weight: 600;
-  box-shadow: 0 1px 3px rgba(31, 35, 41, 0.12);
+  box-shadow: 0 1px 3px rgba(80, 64, 40, 0.14);
 }
 
 /* Top-right cluster: view switch plus the persistent 蓄水池 entry
@@ -144,7 +156,7 @@ button {
 }
 
 .pool-entry:hover {
-  border-color: #c7d5ff;
+  border-color: #d8c9a8;
   color: var(--accent-strong);
 }
 
@@ -183,7 +195,7 @@ button {
 
 .icon-btn:hover {
   background: var(--surface);
-  box-shadow: 0 1px 2px rgba(31, 35, 41, 0.1);
+  box-shadow: 0 1px 2px rgba(80, 64, 40, 0.12);
 }
 
 .today-btn {
@@ -200,15 +212,16 @@ button {
 }
 
 .today-btn:hover {
-  border-color: #c7d5ff;
+  border-color: #d8c9a8;
   color: var(--accent-strong);
 }
 
 .period-title {
   margin: 0 0 0 10px;
+  font-family: var(--font-display);
   font-size: 25px;
   font-weight: 600;
-  letter-spacing: -0.015em;
+  letter-spacing: 0;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
@@ -219,7 +232,7 @@ button {
   min-height: 0;
   margin: 0 24px 24px;
   overflow: hidden;
-  border: 1px solid rgba(31, 35, 41, 0.05);
+  border: 1px solid rgba(80, 64, 40, 0.08);
   border-radius: var(--radius-lg);
   background: var(--surface);
   box-shadow: var(--shadow-card);
@@ -320,8 +333,8 @@ button {
 }
 
 .month-review-item[data-status='done'] .task-check {
-  border-color: #0f9b8e;
-  background: #0f9b8e;
+  border-color: #4f7d6f;
+  background: #4f7d6f;
 }
 
 .month-review-item .month-review-task {
@@ -413,13 +426,13 @@ button {
   white-space: nowrap;
   pointer-events: auto;
   cursor: pointer;
-  box-shadow: 0 1px 1px rgba(31, 35, 41, 0.05);
+  box-shadow: 0 1px 1px rgba(80, 64, 40, 0.07);
   transition: filter 0.14s ease, box-shadow 0.14s ease;
 }
 
 .month-span-bar:hover {
   filter: brightness(0.97);
-  box-shadow: 0 2px 6px rgba(31, 35, 41, 0.1);
+  box-shadow: 0 2px 6px rgba(80, 64, 40, 0.12);
 }
 
 .month-span-bar-label {
@@ -436,9 +449,9 @@ button {
 }
 
 .month-span-bar.is-overdue {
-  --chip-color: #f54a45;
-  --chip-bg: #fff0ef;
-  --chip-text: #c9342f;
+  --chip-color: #b3402f;
+  --chip-bg: #f6e4de;
+  --chip-text: #97362a;
 }
 
 /* 探出本周行的长条：延续侧保持方角，读作「继续」。 */
@@ -478,7 +491,7 @@ button {
 }
 
 .month-cell:hover {
-  background: #f6f8fd;
+  background: #f8f3e8;
 }
 
 .month-cell.is-outside {
@@ -486,7 +499,7 @@ button {
 }
 
 .month-cell.is-outside:hover {
-  background: #f4f6fa;
+  background: #efe7d3;
 }
 
 .date-line {
@@ -509,14 +522,14 @@ button {
 }
 
 .month-cell.is-outside .date-num {
-  color: #b9bec7;
+  color: #b3a48b;
 }
 
 .month-cell.is-today .date-num {
   background: var(--accent);
   color: #fff;
   font-weight: 600;
-  box-shadow: 0 2px 6px rgba(51, 112, 255, 0.3);
+  box-shadow: 0 2px 6px rgba(160, 90, 44, 0.3);
 }
 
 .chips {
@@ -581,8 +594,8 @@ button {
 }
 
 /* ----------------------------------------------------------------- day */
-/* Warm planner surface, structured after the reference: inbox on the left,
-   week strip on top, a quiet vertical timeline on the right. */
+/* 纸质统一（2026-11-15）：日视图的暖纸语言成为全站语言；语义色 --d-* 已在 :root
+   定义，这里只保留纸面背景。 */
 
 .day-view {
   display: flex;
@@ -593,15 +606,9 @@ button {
   padding: 16px 18px 18px;
   overflow: auto;
   background:
-    radial-gradient(120% 70% at 12% 0%, rgba(255, 255, 255, 0.82) 0%, rgba(255, 255, 255, 0) 55%),
-    radial-gradient(90% 60% at 92% 100%, rgba(244, 194, 185, 0.32) 0%, rgba(244, 194, 185, 0) 60%),
-    #f5f1ef;
-  --d-ink: #241d1b;
-  --d-muted: #9a817b;
-  --d-coral: #ef8f86;
-  --d-coral-deep: #d86e64;
-  --d-line: #f1ded8;
-  --d-card: #fffdfb;
+    radial-gradient(120% 70% at 12% 0%, rgba(255, 255, 255, 0.75) 0%, rgba(255, 255, 255, 0) 55%),
+    radial-gradient(90% 60% at 92% 100%, rgba(160, 90, 44, 0.07) 0%, rgba(160, 90, 44, 0) 60%),
+    #f6f1e7;
 }
 
 .day-weekstrip {
@@ -615,17 +622,17 @@ button {
   max-width: 1240px;
   margin: 0 auto;
   padding: 6px;
-  border: 1px solid rgba(221, 179, 169, 0.38);
+  border: 1px solid rgba(120, 100, 70, 0.18);
   border-radius: 16px;
-  background: rgba(255, 253, 251, 0.62);
-  box-shadow: 0 8px 24px rgba(150, 92, 80, 0.05);
+  background: rgba(253, 250, 243, 0.75);
+  box-shadow: 0 8px 24px rgba(80, 64, 40, 0.05);
 }
 
 .day-strip-caption,
 .day-strip-range {
   position: absolute;
   top: 50%;
-  color: #b39b94;
+  color: #978a72;
   font-size: 10px;
   letter-spacing: 0.1em;
   transform: translateY(-50%);
@@ -656,11 +663,11 @@ button {
 }
 
 .day-strip-day:hover {
-  background: rgba(255, 255, 255, 0.85);
+  background: rgba(255, 255, 255, 0.6);
 }
 
 .day-strip-name {
-  color: #a08b86;
+  color: #a5947c;
   font-size: 10px;
   letter-spacing: 0.06em;
 }
@@ -671,7 +678,7 @@ button {
   width: 26px;
   height: 26px;
   border-radius: 50%;
-  color: #3a2f2c;
+  color: #2a2419;
   font-size: 13px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
@@ -679,13 +686,13 @@ button {
 
 .day-strip-day.is-today:not(.is-selected) .day-strip-num {
   color: var(--d-coral-deep);
-  box-shadow: inset 0 0 0 1px #f0b7b0;
+  box-shadow: inset 0 0 0 1px #dcc39f;
 }
 
 .day-strip-day.is-selected .day-strip-num {
   background: var(--d-coral);
   color: #fff;
-  box-shadow: 0 3px 8px rgba(216, 110, 100, 0.28);
+  box-shadow: 0 3px 8px rgba(160, 90, 44, 0.28);
 }
 
 .day-strip-day.is-selected .day-strip-name {
@@ -729,10 +736,10 @@ button {
   flex-direction: column;
   min-height: 0;
   padding: 14px 15px 12px;
-  border: 1px solid rgba(221, 179, 169, 0.38);
+  border: 1px solid rgba(120, 100, 70, 0.18);
   border-radius: 18px;
-  background: rgba(255, 253, 251, 0.94);
-  box-shadow: 0 10px 26px rgba(150, 92, 80, 0.07);
+  background: rgba(253, 250, 243, 0.94);
+  box-shadow: 0 10px 26px rgba(80, 64, 40, 0.06);
 }
 
 .day-panel-head {
@@ -801,14 +808,14 @@ button {
   height: 5px;
   overflow: hidden;
   border-radius: 999px;
-  background: #f5e3de;
+  background: #eee0c8;
 }
 
 .task-progress-fill {
   display: block;
   height: 100%;
   border-radius: 999px;
-  background: linear-gradient(90deg, #f2a199, #e57268);
+  background: linear-gradient(90deg, #d8ae7e, #a05a2c);
   transition: width 0.2s ease;
 }
 
@@ -827,13 +834,13 @@ button {
   align-items: center;
   gap: 9px;
   padding: 9px 3px;
-  border-bottom: 1px dashed #f4e5e0;
+  border-bottom: 1px dashed #eee6d3;
   transition: background 0.15s ease;
 }
 
 .day-task:hover {
   border-radius: 10px;
-  background: #fdf8f5;
+  background: #f8f3e8;
 }
 
 .day-task:last-child {
@@ -850,7 +857,7 @@ button {
 
 .task-title {
   overflow: hidden;
-  color: #2b211e;
+  color: #2a2419;
   font-size: 12.5px;
   font-weight: 550;
   line-height: 1.35;
@@ -859,21 +866,21 @@ button {
 }
 
 .task-status-label {
-  color: #a58c86;
+  color: #978a72;
   font-size: 9.5px;
   line-height: 1.3;
 }
 
 .day-task[data-status="partial"] .task-status-label {
-  color: #b07a33;
+  color: #a9702a;
 }
 
 .day-task[data-status="done"] .task-status-label {
-  color: #789b67;
+  color: #4f7d6f;
 }
 
 .day-task[data-status="done"] .task-title {
-  color: #a7948f;
+  color: #a5947c;
   text-decoration: line-through;
 }
 
@@ -886,7 +893,7 @@ button {
   height: 23px;
   margin-left: 2px;
   padding: 0;
-  border: 2px solid #e8c9c2;
+  border: 2px solid #d8c9a8;
   border-radius: 50%;
   background: var(--d-card);
   color: #fff;
@@ -928,7 +935,7 @@ button {
   flex: none;
   margin: auto 0 0;
   padding-top: 10px;
-  color: #b9a39c;
+  color: #a5947c;
   font-size: 9px;
   text-align: center;
 }
@@ -985,15 +992,15 @@ button {
 }
 
 .day-note--yellow {
-  background: linear-gradient(160deg, #fff3c9, #fbe7a8);
+  background: linear-gradient(160deg, #f7ead0, #f0dcae);
 }
 
 .day-note--pink {
-  background: linear-gradient(160deg, #ffdfe3, #f8ccd3);
+  background: linear-gradient(160deg, #f6dfd8, #eec9bf);
 }
 
 .day-note--blue {
-  background: linear-gradient(160deg, #e2eefb, #cfe0f5);
+  background: linear-gradient(160deg, #e8e6d8, #d8d4bf);
 }
 
 /* quiet vertical timeline ---------------------------------------------- */
@@ -1027,7 +1034,7 @@ button {
 .day-axis-label {
   position: absolute;
   right: 10px;
-  color: #b7a19b;
+  color: #a5947c;
   font-size: 9.5px;
   font-variant-numeric: tabular-nums;
   transform: translateY(-50%);
@@ -1046,7 +1053,7 @@ button {
   left: 22px;
   width: 2px;
   border-radius: 2px;
-  background: linear-gradient(#f2cfc8, #f8e3de);
+  background: linear-gradient(#e0cdb0, #eee0c8);
 }
 
 .day-pill {
@@ -1056,7 +1063,7 @@ button {
   min-height: 26px;
   border-radius: 999px;
   background: var(--pill);
-  box-shadow: 0 0 0 3px rgba(255, 253, 251, 0.95), 0 3px 8px rgba(150, 90, 80, 0.16);
+  box-shadow: 0 0 0 3px rgba(253, 250, 243, 0.95), 0 3px 8px rgba(80, 64, 40, 0.16);
 }
 
 .day-pill-icon {
@@ -1077,19 +1084,19 @@ button {
 }
 
 .day-pill--blue {
-  --pill: #7f9ec9;
+  --pill: #6f8fb8;
 }
 
 .day-pill--teal {
-  --pill: #7fa98c;
+  --pill: #6f9482;
 }
 
 .day-pill--orange {
-  --pill: #df8a7c;
+  --pill: #c98a6a;
 }
 
 .day-pill--violet {
-  --pill: #b087a2;
+  --pill: #9a86ad;
 }
 
 .day-event-copy {
@@ -1104,7 +1111,7 @@ button {
 
 .day-event-title {
   overflow: hidden;
-  color: #2a211f;
+  color: #2a2419;
   font-size: 13px;
   font-weight: 650;
   line-height: 1.3;
@@ -1113,7 +1120,7 @@ button {
 }
 
 .day-event-time {
-  color: #a28a84;
+  color: #978a72;
   font-size: 10px;
   line-height: 1.35;
   font-variant-numeric: tabular-nums;
@@ -1121,7 +1128,7 @@ button {
 
 .day-event-note {
   overflow: hidden;
-  color: #b07a73;
+  color: #a05a2c;
   font-size: 10px;
   font-style: italic;
   line-height: 1.4;
@@ -1134,7 +1141,7 @@ button {
   right: 0;
   left: 0;
   z-index: 4;
-  border-top: 1px solid rgba(216, 110, 100, 0.55);
+  border-top: 1px solid rgba(160, 90, 44, 0.55);
   pointer-events: none;
 }
 
@@ -1156,7 +1163,7 @@ button {
   align-items: center;
   justify-content: center;
   gap: 6px;
-  color: #b39b94;
+  color: #a5947c;
   text-align: center;
   pointer-events: none;
 }
@@ -1168,7 +1175,7 @@ button {
 
 .day-timeline-empty p {
   margin: 0;
-  color: #8c746e;
+  color: #574d3b;
   font-size: 12.5px;
   font-weight: 600;
 }
@@ -1182,9 +1189,9 @@ button {
   place-items: center;
   min-height: 64px;
   padding: 12px;
-  border: 1.5px dashed #ecd4cd;
+  border: 1.5px dashed #d8c9a8;
   border-radius: 12px;
-  color: #b59b94;
+  color: #978a72;
   font-size: 11px;
   text-align: center;
 }
@@ -1203,44 +1210,45 @@ button {
 
 /* --------------------------------------------------------------- colors */
 
+/* 纸质统一后的日程色块：大地色系（蓝→板岩蓝、青→苔绿、橙→赭石、紫→烟紫）。 */
 .chip--blue,
 .event--blue {
-  --chip-color: #3370ff;
-  --chip-bg: #eaf1ff;
-  --chip-text: #245bdb;
-  --event-color: #3370ff;
-  --event-bg: #eaf1ff;
-  --event-text: #1f4fc4;
+  --chip-color: #4a6fa5;
+  --chip-bg: #e9eef5;
+  --chip-text: #3c5c8c;
+  --event-color: #4a6fa5;
+  --event-bg: #e9eef5;
+  --event-text: #3c5c8c;
 }
 
 .chip--teal,
 .event--teal {
-  --chip-color: #0f9b8e;
-  --chip-bg: #e3f7f3;
-  --chip-text: #0a7f75;
-  --event-color: #0f9b8e;
-  --event-bg: #e3f7f3;
-  --event-text: #0a7469;
+  --chip-color: #4f7d6f;
+  --chip-bg: #e6efe9;
+  --chip-text: #3f685c;
+  --event-color: #4f7d6f;
+  --event-bg: #e6efe9;
+  --event-text: #3f685c;
 }
 
 .chip--orange,
 .event--orange {
-  --chip-color: #e07800;
-  --chip-bg: #fff1e0;
-  --chip-text: #b25f00;
-  --event-color: #e07800;
-  --event-bg: #fff1e0;
-  --event-text: #a35600;
+  --chip-color: #a9702a;
+  --chip-bg: #f4e8d8;
+  --chip-text: #8c5c20;
+  --event-color: #a9702a;
+  --event-bg: #f4e8d8;
+  --event-text: #8c5c20;
 }
 
 .chip--violet,
 .event--violet {
-  --chip-color: #7b5cf0;
-  --chip-bg: #efeaff;
-  --chip-text: #5b3fd6;
-  --event-color: #7b5cf0;
-  --event-bg: #efeaff;
-  --event-text: #5238c9;
+  --chip-color: #6f5a9c;
+  --chip-bg: #ece8f4;
+  --chip-text: #5b4884;
+  --event-color: #6f5a9c;
+  --event-bg: #ece8f4;
+  --event-text: #5b4884;
 }
 
 /* ------------------------------------------------------------ responsive */

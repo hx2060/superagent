@@ -25,24 +25,24 @@
   width: 26px;
   height: 26px;
   padding: 0;
-  border: 1px dashed #e3c1ba;
+  border: 1px dashed #d8c9a8;
   border-radius: 8px;
-  background: #fffdfb;
-  color: #b98a7e;
+  background: #fdfaf3;
+  color: #a98a6a;
   cursor: pointer;
   transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
 }
 
 .mod-inbox-add:hover {
   border-color: var(--d-coral-deep);
-  background: #fff7f4;
+  background: #f8f3e8;
   color: var(--d-coral-deep);
 }
 
 .mod-inbox-add[aria-expanded="true"] {
   border-style: solid;
   border-color: var(--d-coral-deep);
-  background: #fdeeea;
+  background: #f3e3d3;
   color: var(--d-coral-deep);
 }
 
@@ -70,27 +70,27 @@
   border: 0;
   border-radius: 6px;
   background: transparent;
-  color: #b39b94;
+  color: #a5947c;
   cursor: pointer;
   transition: background 0.15s ease, color 0.15s ease;
 }
 
 .mod-inbox-icon-btn:hover {
-  background: #f7e9e5;
-  color: #8d6f67;
+  background: #f0e6d6;
+  color: #7d6a52;
 }
 
 .mod-inbox-icon-btn--danger:hover {
-  background: #fdecea;
-  color: #d84a43;
+  background: #f6e4de;
+  color: #b3402f;
 }
 
 .mod-inbox-icon-btn.is-confirming {
   width: auto;
   min-width: 56px;
   padding: 0 5px;
-  background: #fdecea;
-  color: #d84a43;
+  background: #f6e4de;
+  color: #b3402f;
   font-size: 10px;
   font-weight: 600;
   white-space: nowrap;
@@ -112,9 +112,9 @@
 .mod-inbox-task-form--new {
   margin: 8px 3px 0;
   padding: 9px;
-  border: 1px dashed #eed6cf;
+  border: 1px dashed #e3d8c2;
   border-radius: 10px;
-  background: #fffaf7;
+  background: #f8f3e8;
 }
 
 .mod-inbox-input,
@@ -123,10 +123,10 @@
 .mod-inbox-textarea {
   width: 100%;
   padding: 7px 9px;
-  border: 1px solid #eccfc8;
+  border: 1px solid #d8c9a8;
   border-radius: 9px;
-  background: #fffdfb;
-  color: #2b211e;
+  background: #fdfaf3;
+  color: #2a2419;
   font: inherit;
   font-size: 12px;
   line-height: 1.5;
@@ -135,7 +135,7 @@
 .mod-inbox-input:focus,
 .mod-inbox-textarea:focus {
   border-color: var(--d-coral-deep);
-  outline: 2px solid rgba(216, 110, 100, 0.22);
+  outline: 2px solid rgba(160, 90, 44, 0.22);
   outline-offset: 1px;
 }
 
@@ -167,7 +167,7 @@
 }
 
 .mod-inbox-time-label {
-  color: #a58c86;
+  color: #978a72;
   font-size: 9.5px;
   letter-spacing: 0.02em;
 }
@@ -184,20 +184,20 @@
 
 .mod-inbox-time-unit {
   flex: none;
-  color: #a58c86;
+  color: #978a72;
   font-size: 9.5px;
 }
 
 .mod-inbox-form-hint {
   margin: -2px 0 0;
-  color: #b39b94;
+  color: #a5947c;
   font-size: 9.5px;
   line-height: 1.4;
 }
 
 .mod-inbox-task-when {
   overflow: hidden;
-  color: #0f9b8e;
+  color: #4f7d6f;
   font-size: 9.5px;
   line-height: 1.35;
   text-overflow: ellipsis;
@@ -206,7 +206,7 @@
 
 .mod-inbox-task-due {
   overflow: hidden;
-  color: #b07a33;
+  color: #a9702a;
   font-size: 9.5px;
   line-height: 1.35;
   text-overflow: ellipsis;
@@ -214,7 +214,7 @@
 }
 
 .day-task[data-status="done"] .mod-inbox-task-due {
-  color: #b9a39c;
+  color: #a5947c;
 }
 
 .mod-inbox-form-actions {
@@ -234,27 +234,27 @@
 }
 
 .mod-inbox-primary:hover {
-  background: #c96157;
+  background: #b3402f;
 }
 
 .mod-inbox-secondary {
   padding: 4px 10px;
-  border: 1px solid #ead2cb;
+  border: 1px solid #d8c9a8;
   border-radius: 7px;
   background: transparent;
-  color: #9a817b;
+  color: #978a72;
   font-size: 11px;
   cursor: pointer;
 }
 
 .mod-inbox-secondary:hover {
-  border-color: #dcb8ae;
-  color: #7d615a;
+  border-color: #c9bda3;
+  color: #7d6a52;
 }
 
 .mod-inbox-error {
   margin: 0;
-  color: #c0392b;
+  color: #b3402f;
   font-size: 10.5px;
   line-height: 1.45;
 }
@@ -307,13 +307,13 @@
 }
 
 .mod-inbox-task-flag[data-task-flag='due-today'] {
-  background: #fff1e0;
-  color: #b25f00;
+  background: #f6ead6;
+  color: #8c5c20;
 }
 
 .mod-inbox-task-flag[data-task-flag='overdue'] {
-  background: #fdecea;
-  color: #c9342f;
+  background: #f6e4de;
+  color: #97362a;
 }
 
 /* all-day option ------------------------------------------------------- */
@@ -322,7 +322,7 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  color: #7d615a;
+  color: #7d6a52;
   font-size: 11px;
   cursor: pointer;
 }
@@ -360,12 +360,12 @@
 
 .mod-inbox-note .mod-inbox-icon-btn:hover {
   background: rgba(255, 255, 255, 0.55);
-  color: #5a4630;
+  color: #4a3f2c;
 }
 
 .mod-inbox-note .mod-inbox-icon-btn--danger:hover {
   background: rgba(255, 255, 255, 0.72);
-  color: #c0392b;
+  color: #b3402f;
 }
 
 .mod-inbox-note.is-editing {
@@ -383,19 +383,19 @@
   padding: 10px;
   border: 1px dashed rgba(150, 100, 60, 0.3);
   border-radius: 12px;
-  background: rgba(255, 253, 251, 0.72);
+  background: rgba(253, 250, 243, 0.72);
 }
 
 .mod-inbox-note .mod-inbox-textarea,
 .mod-inbox-note-form--new .mod-inbox-textarea {
   border-color: rgba(150, 100, 60, 0.25);
   background: rgba(255, 255, 255, 0.62);
-  color: #5a4630;
+  color: #4a3f2c;
 }
 
 .mod-inbox-note .mod-inbox-secondary {
   border-color: rgba(150, 100, 60, 0.28);
-  color: #7c6247;
+  color: #6f5c3f;
 }
 
 .mod-inbox-sr-only {

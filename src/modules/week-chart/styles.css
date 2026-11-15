@@ -62,14 +62,14 @@
   height: 4px;
   overflow: hidden;
   border-radius: 999px;
-  background: #eef1f6;
+  background: #eee0c8;
 }
 
 .mod-week-chart-progress-fill {
   display: block;
   height: 100%;
   border-radius: inherit;
-  background: #0f9b8e;
+  background: #4f7d6f;
   transition: width 0.18s ease;
 }
 
@@ -96,7 +96,7 @@
 }
 
 .mod-week-chart-day:hover {
-  background: #f8f9fc;
+  background: #f8f3e8;
 }
 
 .mod-week-chart-day-name {
@@ -126,7 +126,7 @@
   background: var(--accent);
   color: #fff;
   font-weight: 600;
-  box-shadow: 0 2px 6px rgba(51, 112, 255, 0.3);
+  box-shadow: 0 2px 6px rgba(160, 90, 44, 0.3);
 }
 
 /* ---------------------------------------------------------------- rows */
@@ -145,7 +145,7 @@
 }
 
 .mod-week-chart-row:hover {
-  background: #fbfcff;
+  background: #faf6ec;
 }
 
 .mod-week-chart-label {
@@ -172,7 +172,7 @@
   width: 18px;
   height: 18px;
   padding: 0;
-  border: 1.5px solid #c9d0da;
+  border: 1.5px solid #c9bda3;
   border-radius: 50%;
   background: var(--surface);
   color: var(--muted);
@@ -186,14 +186,14 @@
 }
 
 .mod-week-chart-toggle[data-status="partial"] {
-  border-color: #f0a63a;
-  background: #fff4e5;
-  color: #b25f00;
+  border-color: #c98a4a;
+  background: #f6ead6;
+  color: #8c5c20;
 }
 
 .mod-week-chart-toggle[data-status="done"] {
-  border-color: #0f9b8e;
-  background: #0f9b8e;
+  border-color: #4f7d6f;
+  background: #4f7d6f;
   color: #fff;
 }
 
@@ -203,7 +203,7 @@
   height: 9px;
   margin: 0 4px;
   border-radius: 50%;
-  background: var(--week-dot, #3370ff);
+  background: var(--week-dot, #4a6fa5);
 }
 
 .mod-week-chart-title {
@@ -270,7 +270,7 @@
 }
 
 .mod-week-chart-grid-day.is-today {
-  background-color: #fbfcff;
+  background-color: #faf6ec;
 }
 
 .mod-week-chart-bar {
@@ -285,10 +285,10 @@
   padding: 0 7px;
   overflow: hidden;
   border: 0;
-  border-left: 3px solid var(--bar-color, #3370ff);
+  border-left: 3px solid var(--bar-color, #4a6fa5);
   border-radius: 6px;
-  background: var(--bar-bg, #eaf1ff);
-  color: var(--bar-text, #245bdb);
+  background: var(--bar-bg, #e9eef5);
+  color: var(--bar-text, #3c5c8c);
   font: inherit;
   font-size: 10.5px;
   font-weight: 500;
@@ -297,13 +297,13 @@
   white-space: nowrap;
   cursor: pointer;
   transform: translateY(-50%);
-  box-shadow: 0 1px 1px rgba(31, 35, 41, 0.05);
+  box-shadow: 0 1px 1px rgba(80, 64, 40, 0.07);
   transition: filter 0.14s ease, box-shadow 0.14s ease;
 }
 
 .mod-week-chart-bar:hover {
   filter: brightness(0.97);
-  box-shadow: 0 2px 6px rgba(31, 35, 41, 0.1);
+  box-shadow: 0 2px 6px rgba(80, 64, 40, 0.12);
 }
 
 .mod-week-chart-bar-label {
@@ -313,45 +313,45 @@
 
 /* Event colors come first; task status colors below take precedence. */
 .mod-week-chart-bar.color-blue {
-  --bar-color: #3370ff;
-  --bar-bg: #eaf1ff;
-  --bar-text: #245bdb;
+  --bar-color: #4a6fa5;
+  --bar-bg: #e9eef5;
+  --bar-text: #3c5c8c;
 }
 
 .mod-week-chart-bar.color-teal {
-  --bar-color: #0f9b8e;
-  --bar-bg: #e3f7f3;
-  --bar-text: #0a7469;
+  --bar-color: #4f7d6f;
+  --bar-bg: #e6efe9;
+  --bar-text: #3f685c;
 }
 
 .mod-week-chart-bar.color-orange {
-  --bar-color: #e07800;
-  --bar-bg: #fff1e0;
-  --bar-text: #b25f00;
+  --bar-color: #a9702a;
+  --bar-bg: #f4e8d8;
+  --bar-text: #8c5c20;
 }
 
 .mod-week-chart-bar.color-violet {
-  --bar-color: #7b5cf0;
-  --bar-bg: #efeaff;
-  --bar-text: #5238c9;
+  --bar-color: #6f5a9c;
+  --bar-bg: #ece8f4;
+  --bar-text: #5b4884;
 }
 
 .mod-week-chart-bar.is-todo {
-  --bar-color: #3370ff;
-  --bar-bg: #eaf1ff;
-  --bar-text: #245bdb;
+  --bar-color: #4a6fa5;
+  --bar-bg: #e9eef5;
+  --bar-text: #3c5c8c;
 }
 
 .mod-week-chart-bar.is-partial {
-  --bar-color: #e07800;
-  --bar-bg: #fff1e0;
-  --bar-text: #b25f00;
+  --bar-color: #a9702a;
+  --bar-bg: #f4e8d8;
+  --bar-text: #8c5c20;
 }
 
 .mod-week-chart-bar.is-done {
-  --bar-color: #0f9b8e;
-  --bar-bg: #e3f7f3;
-  --bar-text: #0a7469;
+  --bar-color: #4f7d6f;
+  --bar-bg: #e6efe9;
+  --bar-text: #3f685c;
   opacity: 0.82;
 }
 
@@ -360,9 +360,9 @@
 }
 
 .mod-week-chart-bar.is-overdue {
-  --bar-color: #f54a45;
-  --bar-bg: #fff0ef;
-  --bar-text: #c9342f;
+  --bar-color: #b3402f;
+  --bar-bg: #f6e4de;
+  --bar-text: #97362a;
 }
 
 .mod-week-chart-bar.is-clipped-start {
@@ -446,7 +446,7 @@
 }
 
 .mod-week-chart-review-row[data-status='done'] .mod-week-chart-review-due {
-  color: #b9c0ca;
+  color: #b3a48b;
 }
 
 /* --------------------------------------------------------------- empty */
