@@ -493,3 +493,111 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* 条目进度（第二迭代 · 方案 B）：行内三态循环按钮。
+   颜色与任务三态同口径：待完成=中性、部分完成=赭石、完成=苔绿。 */
+.mod-attention-switch-progress {
+  min-width: 54px;
+  font-variant-numeric: tabular-nums;
+}
+
+.mod-attention-switch-progress[data-progress='todo'] {
+  border-color: var(--line);
+  color: var(--text-2);
+}
+
+.mod-attention-switch-progress[data-progress='partial'] {
+  border-color: #c98a4a;
+  background: #f6ead6;
+  color: #8c5c20;
+}
+
+.mod-attention-switch-progress[data-progress='done'] {
+  border-color: #4f7d6f;
+  background: #e6efe9;
+  color: #3f685c;
+}
+
+/* 反馈视图：面板内的第四个区域（与三档并列的入口，零主干登记）。 */
+.mod-attention-switch-feedback {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.mod-attention-switch-feedback-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.mod-attention-switch-feedback-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+}
+
+.mod-attention-switch-feedback-cards {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+}
+
+.mod-attention-switch-feedback-card {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface-muted);
+  color: var(--text-2);
+  font-size: 11.5px;
+  line-height: 1.65;
+}
+
+.mod-attention-switch-feedback-card b {
+  color: var(--text);
+}
+
+.mod-attention-switch-feedback-block h4 {
+  margin: 0 0 6px;
+  color: var(--text-2);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.mod-attention-switch-feedback-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.mod-attention-switch-feedback-list li {
+  padding: 6px 9px;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  background: var(--surface-muted);
+  color: var(--text);
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+
+.mod-attention-switch-feedback-list--records li {
+  color: var(--text-2);
+}
+
+.mod-attention-switch-feedback-at {
+  margin-right: 6px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.mod-attention-switch-feedback-empty {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+}

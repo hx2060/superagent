@@ -69,7 +69,25 @@ const events = seed.events;
 
 const inbox = createInboxStore({ tasks: seed.tasks, notes: seed.notes });
 const dailyTasks = createDailyTaskStore(seed.dailyTasks);
-const pool = createPoolStore(seed.pool);
+// 蓄水池的设备本地存储适配器（进度覆盖层 + 取用/进度记录）。只在本机
+// localStorage 读写，不入库、不上传；隐私模式 / 配额不足时静默退化为会话内有效。
+const poolStorage = {
+  getItem(key) {
+    try {
+      return window.localStorage.getItem(key);
+    } catch {
+      return null;
+    }
+  },
+  setItem(key, value) {
+    try {
+      window.localStorage.setItem(key, value);
+    } catch {
+      /* 隐私模式 / 配额不足：不落盘，会话内仍可用 */
+    }
+  },
+};
+const pool = createPoolStore(seed.pool, { storage: poolStorage });
 let inboxView = null;
 let dailyTasksView = null;
 let weekChartView = null;
@@ -177,10 +195,20 @@ const poolApi = Object.freeze({
   remove(id) {
     return pool.deleteItem(id);
   },
+  setProgress(input) {
+    const { id, progress } = input ?? {};
+    return pool.setItemProgress(id, progress);
+  },
+  stats() {
+    return pool.stats();
+  },
+  records() {
+    return pool.useRecords();
+  },
 });
 
 window.schedule = Object.freeze({
-  version: '0.8',
+  version: '0.9',
   tasks: tasksApi,
   dailyTasks: dailyTasksApi,
   pool: poolApi,
