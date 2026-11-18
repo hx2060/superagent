@@ -81,7 +81,7 @@ src/modules/inbox/   清单 / 便签编辑模块（store、面板、样式、单
 src/modules/attention-switch/
                     蓄水池模块（store / 常驻面板 / 单测 / README）
 src/modules/         功能模块目录（契约见 docs）
-docs/                接口、对接、添加接口与机制层交接文档
+docs/                接口、对接、添加接口、更新说明与机制层交接文档
 local/               本地内容（不提交；截图证据也放这里）
 AGENTS.md            协作与主干 / 模块规则
 tests/               单元测试
@@ -93,6 +93,7 @@ scripts/serve.mjs    零依赖本地静态服务器
 - 接口说明：`docs/interfaces.md`
 - 对接文档：`docs/integration.md`
 - 机器人添加日程：`docs/schedule-api.md`
+- 更新说明（版本变更记录）：`docs/release-notes.md`
 - 机制层 / 本地内容边界：`docs/mechanism-handoff.md`
 - 本地内容交接：`local/本地内容交接.md`（不提交）
 - 协作规则：`AGENTS.md`

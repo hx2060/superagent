@@ -9,11 +9,11 @@
 
 | 通道 | 入口 | 作用域 | 适用场景 |
 | --- | --- | --- | --- |
-| 页面手工 | 日视图「清单」→ `＋` → 填写标题 / 开始 / 持续 | 当前页面会话 | 使用者手工补一条 |
-| 运行时 API | `window.schedule.tasks.*` / `window.schedule.dailyTasks.*` / `window.schedule.pool.*` | 当前页面会话 | 机器人 / 自动化在已打开的页面里添加、改状态、删除 |
-| 本地内容文件 | `local/schedule.json`，页面加载时读取 | 持久（刷新后仍在） | 机器人把具体安排写成本地内容，不提交 GitHub |
+| 页面手工 | 日视图「清单」→ `＋` → 填写标题 / 开始 / 持续 | 本机快照（刷新后保留） | 使用者手工补一条 |
+| 运行时 API | `window.schedule.tasks.*` / `window.schedule.dailyTasks.*` / `window.schedule.pool.*` | 本机快照（刷新后保留） | 机器人 / 自动化在已打开的页面里添加、改状态、删除 |
+| 本地内容文件 | `local/schedule.json`，页面加载时读取 | 持久（刷新后仍在，跨设备） | 机器人把具体安排写成本地内容，不提交 GitHub |
 
-推荐流程：**机制与接口在 GitHub；具体内容写 `local/schedule.json`；刷新页面验证。** 运行时 API 适合临时操作或页面内自动化；它不会写回本地文件。
+推荐流程：**机制与接口在 GitHub；具体内容写 `local/schedule.json`；刷新页面验证。** 运行时 API 与页面手工写入浏览器本机快照（localStorage，刷新后保留，`local/schedule.json` 变过时以文件为准、完成状态按 id 保留）；两者都不会写回本地文件，需要跨设备保留时仍写 `local/schedule.json`。
 
 ## 2. 数据契约
 
@@ -148,7 +148,7 @@ window.schedule.dailyTasks.getStatus('daily-water', '2026-11-08');
 
 ### 3.3 `window.schedule.pool`（蓄水池）
 
-蓄水池条目（网课 / 论文 / 网页 / 工作 / 杂事），按三档学习状态归档；只存当前页面会话，持久请写本地内容文件的 `pool` 键。
+蓄水池条目（网课 / 论文 / 网页 / 工作 / 杂事），按三档学习状态归档；增改删写本机快照（localStorage，刷新后保留），跨设备保留请写本地内容文件的 `pool` 键。
 
 ```js
 window.schedule.pool.add({
@@ -235,7 +235,7 @@ window.schedule.pool.remove('pool-01');
 
 约束：
 
-- 本地文件是**只读种子**：应用不会写回；页面内新增 / 修改 / 删除只在当前会话有效。
+- 本地文件是**只读种子**：应用不会写回；页面内新增 / 修改 / 删除写浏览器本机快照（localStorage），刷新后保留，`local/schedule.json` 变过时以文件为准、完成状态按 id 保留（规则见 `docs/interfaces.md` 5.4）。
 - `tasks[].id` 建议必填且唯一；缺失或重复时运行时会生成临时 id（刷新后可能变化），机器人仍应写入稳定 id。`events[].id`、`notes[].id`、`dailyTasks[].id` 同理。
 - `tasks[].status` 可选，缺省 `todo`；`end` 不要手写，按 `start + duration` 派生。
 - 标题、便签、备注按纯文本渲染；不要放 HTML。

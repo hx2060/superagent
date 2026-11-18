@@ -119,7 +119,7 @@ export function mount(context) {
 - **每日任务**：`src/modules/daily-tasks/`；日视图通过 `[data-module-root="daily-tasks"]` 接入，共享状态走 `services.dailyTasks`，dsh 输入见 `docs/schedule-api.md`。
 - **新视图**：按模块契约新增；注册点改动需评审。
 - **任务状态持久化**：由数据源 / services 提供，不在 UI 模块内散落存储逻辑。当前由 `src/persistence.js` 的本机快照落地（localStorage，随原点隔离，刷新后恢复；`local/schedule.json` 变过时以文件为准、完成状态按 id 保留；不写回文件、不提交仓库）。
-- **清单 / 便签 CRUD**：已由 `src/modules/inbox` 提供（新增、修改、删除；页面会话内有效）；清单任务可选时间并同步到日 / 周 / 月，也可带可选截止日期；界面更改写本机快照，跨设备 / 清理后的持久化由本地内容文件或后续数据源提供。
+- **清单 / 便签 CRUD**：已由 `src/modules/inbox` 提供（新增、修改、删除；界面更改写本机快照，刷新后保留）；清单任务可选时间并同步到日 / 周 / 月，也可带可选截止日期；跨设备 / 清理后的持久化由本地内容文件或后续数据源提供。
 - **日程 CRUD、提醒、协作、多日历、时区**：当前范围外；需要需求方明确立项后再做。
 
 ## 8. 机制层与本地内容分离

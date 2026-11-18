@@ -587,7 +587,7 @@ window.schedule.tasks.update('task-20261108-1', { start: '', duration: '' }); //
 window.schedule.tasks.update('task-20261108-1', { date: '' });                // 回到收集区
 window.schedule.tasks.remove('task-20261108-1');
 
-// 每日任务：当前页面会话内
+// 每日任务：写本机快照，刷新后保留
 window.schedule.dailyTasks.add({ title: '整理今日待办', icon: '📝' });
 window.schedule.dailyTasks.list('2026-11-06');
 // [{ task: { id, title, icon, recurrence: 'daily' }, status: 'todo' }, ...]
@@ -595,7 +595,7 @@ window.schedule.dailyTasks.toggle('daily-01', '2026-11-06');
 window.schedule.dailyTasks.setStatus('daily-01', 'done', '2026-11-06');
 window.schedule.dailyTasks.getStatus('daily-01', '2026-11-06');
 
-// 蓄水池：当前页面会话内
+// 蓄水池：写本机快照，刷新后保留
 window.schedule.pool.add({
   title: '线性代数网课',
   url: 'https://www.bilibili.com/video/BV1xx',
@@ -629,6 +629,8 @@ window.schedule.pool.remove('pool-01');
 - 纯函数导出：`seedFingerprint` / `sanitizeSnapshot` / `readSnapshot` / `writeSnapshot` / `createSnapshot` / `restoreState` / `resolveStorage`，可在 node:test 中直接测试。
 
 ## 6. 版本与兼容
+
+用户可见的版本变化另见 `docs/release-notes.md`（0.9 起）；本节记录接口契约的增量明细。
 
 - 当前接口版本 `0.9`；0.2 增量加入 `DailyTask`、`DailyTasksService`、`window.schedule.dailyTasks` 与每日任务 DOM；0.3 增量加入清单 / 便签 CRUD、任务可选时间字段与日视图时间表派生事件；0.4 增量加入任务可选 `due` 截止日期与行内展示；0.5 增量加入周图模块、月 / 周 / 日任务统一、任务可选 `id`、`window.schedule.tasks`、本地内容文件与机制层交接约定；0.6 增量加入「当日计划 / 收集区」分区与日进度口径、周 / 月逾期回顾区、全天任务（`date` 不带时间）、`due ≥ date` 写入校验、共享任务日期映射（`taskWindow` / `taskDayEntry` / `taskReviewGroups`）与 `listUnscheduledTasks()`；0.7 增量加入蓄水池（`PoolItem` / `PoolService` / `window.schedule.pool`、顶栏常驻入口与面板选择器、本地内容可选 `pool` 键）；0.8 增量加入月视图跨天长条（`monthSpanBars` 纯函数、`[data-month-span-bar]` 选择器，跨天任务从「首尾两个 chip」改为「一条按周行裁剪的长条」；长条与日格同网格显式占位、周行高度 `minmax(72px, auto)` 按内容动态延伸并在放不下时内部滚动，chip 与「+N 项」始终完整）；0.9 增量加入本机快照持久化（`src/persistence.js`、`createDailyTaskStore` 的 `statuses` 选项与 `listStatuses()`、界面编辑刷新后保留，规则见 5.4）。已发布字段与稳定选择器保持不变。
 - 0.9 的行为变化（需在 PR / 迁移说明中告知）：① 任务状态、清单 / 便签增删改、每日任务按日状态与蓄水池条目不再「刷新即回退」，改为写浏览器本机快照并在刷新后恢复；② `local/schedule.json` 变化时内容以文件为准，完成状态按 id 保留；③ 本机快照按原点隔离，换端口 / 域名 / 浏览器相当于新实例。
