@@ -136,6 +136,57 @@ test('toggleStatus cycles the requested day only', () => {
   assert.equal(store.getStatus('a', day), 'todo');
 });
 
+test('statuses 种子参数恢复按日状态，忽略未知任务 / 日期 / 状态', () => {
+  const store = createDailyTaskStore(
+    [
+      { id: 'a', title: '喝水' },
+      { id: 'b', title: '阅读' },
+    ],
+    {
+      statuses: {
+        '2026-11-06': { a: 'done', b: 'partial', missing: 'done' },
+        '2026-02-30': { a: 'done' },
+        '2026-11-07': { a: 'todo', b: 'done' },
+        'not-a-date': { a: 'done' },
+      },
+    }
+  );
+
+  assert.equal(store.getStatus('a', '2026-11-06'), 'done');
+  assert.equal(store.getStatus('b', '2026-11-06'), 'partial');
+  assert.equal(store.getStatus('b', '2026-11-07'), 'done');
+  assert.equal(store.getStatus('a', '2026-11-07'), 'todo');
+  assert.equal(store.getStatus('a', '2026-11-08'), 'todo');
+});
+
+test('listStatuses 只记录偏离缺省 todo 的状态，可回灌', () => {
+  const store = createDailyTaskStore([
+    { id: 'a', title: '喝水' },
+    { id: 'b', title: '阅读' },
+  ]);
+  assert.deepEqual(store.listStatuses(), {});
+
+  store.setStatus('a', '2026-11-06', 'done');
+  store.setStatus('b', '2026-11-06', 'partial');
+  assert.deepEqual(store.listStatuses(), {
+    '2026-11-06': { a: 'done', b: 'partial' },
+  });
+
+  // 切回 todo 等于缺省，快照里不再记录
+  store.setStatus('b', '2026-11-06', 'todo');
+  assert.deepEqual(store.listStatuses(), { '2026-11-06': { a: 'done' } });
+
+  const revived = createDailyTaskStore(
+    [
+      { id: 'a', title: '喝水' },
+      { id: 'b', title: '阅读' },
+    ],
+    { statuses: store.listStatuses() }
+  );
+  assert.equal(revived.getStatus('a', '2026-11-06'), 'done');
+  assert.equal(revived.getStatus('b', '2026-11-06'), 'todo');
+});
+
 test('statusCounts follows the shared task progress contract per day', () => {
   const store = createDailyTaskStore([
     { id: 'a', title: '喝水' },

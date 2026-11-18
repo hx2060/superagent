@@ -29,7 +29,8 @@ local/
 ```
 
 - 缺失或损坏的 `local/schedule.json` 不会影响应用：`src/data.js` 的空白种子作为回退。
-- 应用**不会**把 UI 编辑写回本地文件；页面内新增 / 修改 / 删除仍只在当前会话有效。需要持久化的内容由机器人或使用者写入 `local/schedule.json` 后刷新。
+- 应用**不会**把 UI 编辑写回本地文件；页面内新增 / 修改 / 删除改写**浏览器本机快照**（localStorage，键 `schedule.local-state.v1`，随原点隔离），刷新后恢复；`local/schedule.json` 变过时以文件为准、完成状态按 id 保留（规则见 `docs/interfaces.md` 5.4）。需要跨设备保留的内容仍由机器人或使用者写入 `local/schedule.json` 后刷新。
+- 本机快照与 `local/` 同属本机内容层：不提交仓库、不进 PR，公网脱敏副本同样不含它。
 - 公开预览是脱敏副本，不能包含 `local/`（见 `docs/integration.md` 第 4 节）。
 
 ## 3. 截图与视觉验证
@@ -59,6 +60,7 @@ local/
 5. **日视图「清单」= 当日计划 + 收集区**：成员规则与日进度口径见 `docs/interfaces.md` 2.3；读取收集区用 `services.inbox.listUnscheduledTasks()`。
 6. **逾期回顾区**：周 / 月视图展示截止已过且未删除的任务（`taskReviewGroups`），分「逾期未完成 / 已完成」，保留至删除。
 7. 新增稳定选择器：`[data-inbox-section]`、`[data-all-day]`、`[data-inbox-task-add-allday]` / `[data-inbox-task-edit-allday]`、`[data-task-flag]`、`[data-week-chart-review]` / `[data-week-chart-review-row]`、`[data-review-group]`、`[data-month-review]` / `[data-review-item]`。
+8. **本机快照（0.9）**：任务状态 / 清单 / 便签 / 每日任务按日状态 / 蓄水池条目写 localStorage 并在刷新后恢复；`local/schedule.json` 变过时内容以文件为准、完成状态按 id 保留；快照不提交、不写回文件，接入后端后应让位给服务端数据。
 
 ## 6. 本地 / 测试两个实例
 
@@ -97,7 +99,7 @@ local/
 ## 8. 机器人添加工作的分工
 
 1. 机器人先读 `docs/schedule-api.md`，确认数据格式、校验规则与错误码。
-2. 具体内容写入 `local/schedule.json`（或通过页面运行时 `window.schedule` 做当前会话操作），**不要**改 `src/data.js` 的空白种子，也不要提交内容文件。
+2. 具体内容写入 `local/schedule.json`（或通过页面运行时 `window.schedule` 做本机操作：写浏览器快照，刷新后保留），**不要**改 `src/data.js` 的空白种子，也不要提交内容文件。
 3. 刷新页面后验证：清单、日视图时间表、周图、月视图使用同一份任务数据。
 4. 汇报时只描述机制与验证结果；具体任务内容留在本地交接文档。
 

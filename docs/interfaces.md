@@ -1,6 +1,6 @@
 # 日程 · 接口说明
 
-版本：`0.8`（PR #3 主干基线 + 每日任务 + 清单 / 便签编辑 + 周图任务 × 时间方块 + 月 / 周 / 日任务统一 + 本地内容与添加接口 + 当日计划 / 收集区分区 + 逾期回顾区 + 全天任务 + 蓄水池（attention-switch）多档选项池 + 月视图跨天长条）
+版本：`0.9`（PR #3 主干基线 + 每日任务 + 清单 / 便签编辑 + 周图任务 × 时间方块 + 月 / 周 / 日任务统一 + 本地内容与添加接口 + 当日计划 / 收集区分区 + 逾期回顾区 + 全天任务 + 蓄水池（attention-switch）多档选项池 + 月视图跨天长条 + 本机快照持久化）
 适用范围：当前静态实现、后续模块与后端对接
 
 本文档说明「日程」当前**已经实现**的模块接口、数据契约与 DOM 契约，以及预留的扩展接口。接口变更必须同步修改本文档，并按 `AGENTS.md` 的规则评审。
@@ -11,6 +11,7 @@
 src/calendar.js    纯日期 / 网格 / 时间布局函数（无 DOM、无副作用）
 src/tasks.js       任务三态与进度统计（无 DOM）
 src/data.js        空白种子数据（首次加载无示例内容，可被数据源替换）
+src/persistence.js 本机快照：界面状态持久化与恢复（无 DOM）
 src/app.js         应用控制器：状态、视图分发、DOM 事件、window.schedule
 src/modules/daily-tasks/
                    每日重复任务模块：store、日视图 UI、模块测试
@@ -23,7 +24,7 @@ index.html         页面骨架、工具栏与模块样式入口
 assets/styles.css  全局与视图样式
 ```
 
-当前没有构建步骤和运行时依赖；`app.js` 是唯一入口，负责读取 URL、维护 `state`、渲染视图与处理交互。页面启动时先尝试读取可选的本地内容文件 `local/schedule.json`（不提交仓库），缺失时使用 `src/data.js` 的空白种子。日视图挂载 `daily-tasks` 与 `inbox` 模块，周视图挂载 `week-chart` 模块；三者分别通过 `services.dailyTasks` / `services.inbox` 共享状态。`attention-switch` 的根节点在页面骨架中常驻（`#view-root` 之外），只挂载一次，通过 `services.pool` 共享状态。
+当前没有构建步骤和运行时依赖；`app.js` 是唯一入口，负责读取 URL、维护 `state`、渲染视图与处理交互。页面启动时先尝试读取可选的本地内容文件 `local/schedule.json`（不提交仓库），缺失时使用 `src/data.js` 的空白种子，再由 `src/persistence.js` 的本机快照把上次会话的状态接回种子之上（规则见 5.4）。日视图挂载 `daily-tasks` 与 `inbox` 模块，周视图挂载 `week-chart` 模块；三者分别通过 `services.dailyTasks` / `services.inbox` 共享状态。`attention-switch` 的根节点在页面骨架中常驻（`#view-root` 之外），只挂载一次，通过 `services.pool` 共享状态。
 
 ### 1.1 接口分层与兼容原则
 
@@ -145,14 +146,14 @@ interface PoolItem {
 - `DailyTask.recurrence` 固定为 `daily`；定义没有日期字段，日期只用于读取/写入当天的完成状态；跨天默认回到 `todo`。
 - 每日任务只在日视图展示和手工添加；月 / 周视图不展示每日任务条。清单任务按日期进入月 / 周视图，两者共用同一份 store。
 - `PoolItem.tiers` 非空且只含已知档位（写入时抛 `POOL_TIER_INVALID`）；`url` 必须是 `http(s)://` 开头（`POOL_URL_INVALID`）；`createdAt` 必须是真实日期键，缺省取当天。
-- 蓄水池条目的增改删只存当前页面会话；刷新后回到 `local/schedule.json` 的 `pool` 初值；「从清单加入」是单向快照，之后池与清单互不影响。
-- 清单 / 便签的新增、修改、删除只保存在当前页面会话（内存 store）；刷新后回到本地内容文件 / 空白种子的初始状态。
+- 蓄水池条目的增改删写进本机快照（localStorage），刷新后保留；快照损坏或存储不可用时回到 `local/schedule.json` 的 `pool` 初值；「从清单加入」是单向快照，之后池与清单互不影响。
+- 清单 / 便签的新增、修改、删除与任务状态写进本机快照（localStorage），刷新后保留；本地内容文件变过时以文件为准、界面新增条目与完成状态按 id 保留（规则见 5.4）。
 
 ### 2.4 示例数据
 
 `src/data.js` 导出 `sampleEvents`、`sampleNotes`、`sampleTasks`、`sampleDailyTasks`，当前均为空数组：按需求方要求首次加载不显示示例内容，日程 / 清单 / 便签 / 每日任务都从空白开始，通过 UI 新增。文件仍保留为数据源替换点；任何示例数据不得包含真实用户隐私、飞书私有内容、凭据或 token。
 
-`sampleDailyTasks` 是每日任务的定义入口。具体日程内容存放在 **`local/schedule.json`**（已被 `.gitignore` 忽略，不提交仓库）：页面启动时读取其中的 `events` / `notes` / `tasks` / `dailyTasks`，缺失或损坏时回退到上述空白数组。应用不会写回本地文件；运行时新增只存在当前页面会话。
+`sampleDailyTasks` 是每日任务的定义入口。具体日程内容存放在 **`local/schedule.json`**（已被 `.gitignore` 忽略，不提交仓库）：页面启动时读取其中的 `events` / `notes` / `tasks` / `dailyTasks`，缺失或损坏时回退到上述空白数组。应用不会写回本地文件；界面编辑写进浏览器本机快照（localStorage，见 5.4），刷新后保留。
 
 仓库与 PR 不提交截图；视觉证据按 `docs/mechanism-handoff.md` 只保留在本地。
 
@@ -240,13 +241,14 @@ store 方法：
 | 导出 | 说明 |
 | --- | --- |
 | `normalizeDailyTask(input)` | 校验并规范化 `{ id?, title, icon? }`；返回带 `recurrence: 'daily'` 的对象或 `null` |
-| `createDailyTaskStore(seedTasks, options?)` | 创建 store；`options.createId` 可注入 id 生成器（测试用） |
+| `createDailyTaskStore(seedTasks, options?)` | 创建 store；`options.createId` 可注入 id 生成器（测试用），`options.statuses` 可注入按日状态快照（宿主恢复用，见 5.4） |
 | `store.addTask(input)` | 新增定义；返回任务副本；非法标题 / 重复 id 抛带 `code` 的 `Error` |
 | `store.listTasks()` | 全部定义副本 |
 | `store.listForDate(dateKey)` | `[{ task, status }]`，状态缺省 `todo` |
 | `store.getStatus(taskId, dateKey)` | 当天状态 |
-| `store.setStatus(taskId, dateKey, status)` | 写入当天状态 |
+| `store.setStatus(taskId, dateKey, status)` | 写入当天状态；写回 `todo` 等于缺省，不占记录 |
 | `store.toggleStatus(taskId, dateKey)` | 按三态循环切换当天状态 |
+| `store.listStatuses()` | 按日状态快照 `{ [dateKey]: { [taskId]: status } }`，只含偏离缺省 `todo` 的条目（宿主持久化用） |
 | `store.statusCounts(dateKey)` | 当天 `{ total, todo, partial, done, percent }` |
 | `store.subscribe(listener)` | 返回退订函数；新增 / 状态变化时通知 |
 
@@ -388,7 +390,7 @@ store 方法：`addItem` / `updateItem` / `deleteItem` / `listItems` / `listByTi
 - 入口常驻顶栏（任何视图可用）；面板为模态层，`role="dialog"`。
 - 点入口开面板；关闭按钮 / 背景 / `Escape` 关面板，焦点回入口按钮。`Escape` 依次收起表单 / 导入列表 / 面板。
 - 三档切换显示该档选项（缺省 5 个）；有链接的选项点击新标签页打开并标记取用（排序置后）；无链接的展开详情。
-- 三种录入形式：面板表单、`window.schedule.pool.add`、本地内容文件的 `pool` 键；修改 / 删除只存当前会话，刷新回本地初值。
+- 三种录入形式：面板表单、`window.schedule.pool.add`、本地内容文件的 `pool` 键；修改 / 删除写进本机快照，刷新后保留（规则见 5.4）。
 - 「从清单加入」只读 `services.inbox` 的任务列表；单向联动，池内容不回写清单。
 - 面板打开时，方向键 / `T` / `M` / `W` / `D` 不驱动日历导航。
 - 校验失败时表单保持打开，错误信息 `role="alert"`，标题框获焦点。
@@ -471,6 +473,7 @@ interface DailyTasksService {
   setStatus(taskId: string, date: string, status: TaskStatus): TaskStatus;
   toggleStatus(taskId: string, date: string): TaskStatus;
   statusCounts(date: string): { total: number; todo: number; partial: number; done: number; percent: number };
+  listStatuses(): Record<string, Record<string, TaskStatus>>;
   subscribe(listener: (change: object) => void): () => void;
 }
 ```
@@ -560,7 +563,7 @@ interface CalendarDataSource {
 
 ### 5.3 dsh 输入接口
 
-`app.js` 暴露只读命名空间 `window.schedule`（`version: '0.8'`），包含任务、每日任务与蓄水池三个运行时接口：
+`app.js` 暴露只读命名空间 `window.schedule`（`version: '0.9'`），包含任务、每日任务与蓄水池三个运行时接口：
 
 ```js
 // 任务：清单 / 日 / 周 / 月共用
@@ -584,7 +587,7 @@ window.schedule.tasks.update('task-20261108-1', { start: '', duration: '' }); //
 window.schedule.tasks.update('task-20261108-1', { date: '' });                // 回到收集区
 window.schedule.tasks.remove('task-20261108-1');
 
-// 每日任务：当前页面会话内
+// 每日任务：写本机快照，刷新后保留
 window.schedule.dailyTasks.add({ title: '整理今日待办', icon: '📝' });
 window.schedule.dailyTasks.list('2026-11-06');
 // [{ task: { id, title, icon, recurrence: 'daily' }, status: 'todo' }, ...]
@@ -592,7 +595,7 @@ window.schedule.dailyTasks.toggle('daily-01', '2026-11-06');
 window.schedule.dailyTasks.setStatus('daily-01', 'done', '2026-11-06');
 window.schedule.dailyTasks.getStatus('daily-01', '2026-11-06');
 
-// 蓄水池：当前页面会话内
+// 蓄水池：写本机快照，刷新后保留
 window.schedule.pool.add({
   title: '线性代数网课',
   url: 'https://www.bilibili.com/video/BV1xx',
@@ -609,11 +612,28 @@ window.schedule.pool.remove('pool-01');
 - 任务添加支持可选 `id`；重复 id 抛 `INBOX_TASK_DUPLICATE_ID`。完整字段、校验与示例见 `docs/schedule-api.md`。
 - `list(date = 今天)`、`getStatus(id, date = 今天)`、`toggle(id, date = 今天)`、`setStatus(id, status, date = 今天)` 的日期参数为 `YYYY-MM-DD`。
 - 非法输入抛带 `code` 的 `Error`（任务 / 每日任务的错误码见 `docs/schedule-api.md`）。
-- 运行时新增与手工添加只存在当前页面会话；刷新后回到 `local/schedule.json` 或 `src/data.js` 的初始内容。需要持久化的机器人输入应写 `local/schedule.json` 后重新加载，不要把具体内容提交仓库。
+- 运行时新增与手工添加写进本机快照（localStorage），刷新后保留；本地内容文件变过时以文件为准、界面新增条目与完成状态按 id 保留（见 5.4）。需要持久化的机器人输入仍可写 `local/schedule.json` 后重新加载，不要把具体内容提交仓库。
+
+### 5.4 本机快照（持久化）
+
+界面状态（任务及完成状态、便签、每日任务定义与按日状态、蓄水池条目）由 `src/persistence.js` 写进浏览器本机存储，修复「标记完成后刷新就掉」。存储不可用（隐私模式等）时静默关闭，行为与之前一致。
+
+- 键名：`schedule.local-state.v1`（`STORAGE_KEY`）；快照格式版本 `PERSISTENCE_VERSION = 1`，不匹配时忽略旧快照。
+- 快照形状：`{ version, seedKey, savedAt, tasks, notes, dailyTasks, dailyStatuses, pool }`；`dailyStatuses` 为 `{ [dateKey]: { [taskId]: status } }`，只记录偏离缺省 `todo` 的状态；`tasks` 不含派生字段 `end`。
+- 恢复规则（`restoreState(seed, snapshot)`）：
+  1. 没有快照 → 按种子启动；
+  2. 种子指纹一致（`local/schedule.json` 没变）→ 完全恢复快照（增 / 删 / 改 / 状态都在）；
+  3. 种子指纹不一致（文件被机器人 / 使用者重写）→ 内容以文件为准，界面新增条目追加保留，任务 / 每日任务的完成状态按 id 保留（任务已不存在则丢弃）。
+- 写入时机：任一 store 变更后防抖 200ms 合并写一次，`pagehide` 时补写一次；不写回 `local/schedule.json`。
+- 隔离：localStorage 按原点（协议 + 主机 + 端口）隔离，本地 / 测试 / 常驻三个入口互不影响；快照与 `local/` 同属本机内容层，不提交仓库。
+- 纯函数导出：`seedFingerprint` / `sanitizeSnapshot` / `readSnapshot` / `writeSnapshot` / `createSnapshot` / `restoreState` / `resolveStorage`，可在 node:test 中直接测试。
 
 ## 6. 版本与兼容
 
-- 当前接口版本 `0.8`；0.2 增量加入 `DailyTask`、`DailyTasksService`、`window.schedule.dailyTasks` 与每日任务 DOM；0.3 增量加入清单 / 便签 CRUD、任务可选时间字段与日视图时间表派生事件；0.4 增量加入任务可选 `due` 截止日期与行内展示；0.5 增量加入周图模块、月 / 周 / 日任务统一、任务可选 `id`、`window.schedule.tasks`、本地内容文件与机制层交接约定；0.6 增量加入「当日计划 / 收集区」分区与日进度口径、周 / 月逾期回顾区、全天任务（`date` 不带时间）、`due ≥ date` 写入校验、共享任务日期映射（`taskWindow` / `taskDayEntry` / `taskReviewGroups`）与 `listUnscheduledTasks()`；0.7 增量加入蓄水池（`PoolItem` / `PoolService` / `window.schedule.pool`、顶栏常驻入口与面板选择器、本地内容可选 `pool` 键）；0.8 增量加入月视图跨天长条（`monthSpanBars` 纯函数、`[data-month-span-bar]` 选择器，跨天任务从「首尾两个 chip」改为「一条按周行裁剪的长条」；长条与日格同网格显式占位、周行高度 `minmax(72px, auto)` 按内容动态延伸并在放不下时内部滚动，chip 与「+N 项」始终完整）。已发布字段与稳定选择器保持不变。
+用户可见的版本变化另见 `docs/release-notes.md`（0.9 起）；本节记录接口契约的增量明细。
+
+- 当前接口版本 `0.9`；0.2 增量加入 `DailyTask`、`DailyTasksService`、`window.schedule.dailyTasks` 与每日任务 DOM；0.3 增量加入清单 / 便签 CRUD、任务可选时间字段与日视图时间表派生事件；0.4 增量加入任务可选 `due` 截止日期与行内展示；0.5 增量加入周图模块、月 / 周 / 日任务统一、任务可选 `id`、`window.schedule.tasks`、本地内容文件与机制层交接约定；0.6 增量加入「当日计划 / 收集区」分区与日进度口径、周 / 月逾期回顾区、全天任务（`date` 不带时间）、`due ≥ date` 写入校验、共享任务日期映射（`taskWindow` / `taskDayEntry` / `taskReviewGroups`）与 `listUnscheduledTasks()`；0.7 增量加入蓄水池（`PoolItem` / `PoolService` / `window.schedule.pool`、顶栏常驻入口与面板选择器、本地内容可选 `pool` 键）；0.8 增量加入月视图跨天长条（`monthSpanBars` 纯函数、`[data-month-span-bar]` 选择器，跨天任务从「首尾两个 chip」改为「一条按周行裁剪的长条」；长条与日格同网格显式占位、周行高度 `minmax(72px, auto)` 按内容动态延伸并在放不下时内部滚动，chip 与「+N 项」始终完整）；0.9 增量加入本机快照持久化（`src/persistence.js`、`createDailyTaskStore` 的 `statuses` 选项与 `listStatuses()`、界面编辑刷新后保留，规则见 5.4）。已发布字段与稳定选择器保持不变。
+- 0.9 的行为变化（需在 PR / 迁移说明中告知）：① 任务状态、清单 / 便签增删改、每日任务按日状态与蓄水池条目不再「刷新即回退」，改为写浏览器本机快照并在刷新后恢复；② `local/schedule.json` 变化时内容以文件为准，完成状态按 id 保留；③ 本机快照按原点隔离，换端口 / 域名 / 浏览器相当于新实例。
 - 0.6 的行为变化（需在 PR / 迁移说明中告知）：① 日视图「清单」不再展示全部任务，只展示当日计划 + 收集区；② `updateTask` 清空 `start` / `duration` 从「解绑日期」变为「变为全天任务」，解绑需显式 `date: ''`；③ `addTask({ date })` 不再静默忽略日期，而是创建全天任务；④ `due` 早于 `date` 的写入抛 `INBOX_TASK_DUE_INVALID`。
 - 新增字段必须可选，渲染层对未知可选字段保持忽略。
 - 颜色 / 图标 / 状态枚举新增时，需要同时补样式与回退；删除或重命名属于 breaking change。

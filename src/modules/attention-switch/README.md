@@ -83,7 +83,7 @@ mount(context) -> {
 
 - 池是**新实体**，与 `Task` / `DailyTask` 并列；不改造它们，也不与它们同步状态。
 - 一条目可属多档；同一内容不必录两遍。
-- 编辑只存当前页面会话；刷新后回到 `local/schedule.json` 的 `pool` 初值（与其它模块一致）。
+- 编辑由宿主写进浏览器本机快照（localStorage），刷新后保留；`local/schedule.json` 变过时内容以文件为准、界面新增条目保留（与其它模块一致，规则见 `docs/interfaces.md` 5.4）。「取用标记」仍是会话内排序用的临时状态，不写快照。
 - 所有文本按纯文本渲染转义；不写入 HTML；不读取凭据。
 - 样式全部 `.mod-attention-switch-` 前缀，不修改全局元素样式；零运行时依赖。
 

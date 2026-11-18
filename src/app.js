@@ -30,6 +30,13 @@ import {
   sampleTasks,
 } from './data.js';
 import {
+  createSnapshot,
+  readSnapshot,
+  resolveStorage,
+  restoreState,
+  writeSnapshot,
+} from './persistence.js';
+import {
   TASK_STATUS_LABELS,
   monthSpanBars,
   taskMonthAnchors,
@@ -67,12 +74,49 @@ const seed = pickSeedData(localData, {
 });
 const events = seed.events;
 
-const inbox = createInboxStore({ tasks: seed.tasks, notes: seed.notes });
-const dailyTasks = createDailyTaskStore(seed.dailyTasks);
-const pool = createPoolStore(seed.pool);
+// 本机快照：把上次会话的状态（任务完成状态、增删改）接回种子之上；本地内容
+// 文件变过时以文件为准、完成状态按 id 保留。读取失败按种子启动，规则见
+// src/persistence.js；只写浏览器本机存储，不写回 local/schedule.json。
+const storage = resolveStorage();
+const restored = restoreState(seed, readSnapshot(storage));
+
+const inbox = createInboxStore({ tasks: restored.tasks, notes: restored.notes });
+const dailyTasks = createDailyTaskStore(restored.dailyTasks, { statuses: restored.dailyStatuses });
+const pool = createPoolStore(restored.pool);
 let inboxView = null;
 let dailyTasksView = null;
 let weekChartView = null;
+
+// 任一 store 变化后合并写一次本机快照（防抖 + 页面隐藏时补写），刷新不丢状态。
+const PERSIST_DEBOUNCE_MS = 200;
+let persistTimer = null;
+
+function persistNow() {
+  writeSnapshot(
+    storage,
+    createSnapshot({
+      seed,
+      tasks: inbox.listTasks(),
+      notes: inbox.listNotes(),
+      dailyTasks: dailyTasks.listTasks(),
+      dailyStatuses: dailyTasks.listStatuses(),
+      pool: pool.listItems(),
+    })
+  );
+}
+
+function schedulePersist() {
+  if (persistTimer !== null) return;
+  persistTimer = setTimeout(() => {
+    persistTimer = null;
+    persistNow();
+  }, PERSIST_DEBOUNCE_MS);
+}
+
+inbox.subscribe(schedulePersist);
+dailyTasks.subscribe(schedulePersist);
+pool.subscribe(schedulePersist);
+window.addEventListener('pagehide', persistNow);
 
 const EVENT_DOT_COLORS = {
   blue: '#3370ff',
@@ -180,7 +224,7 @@ const poolApi = Object.freeze({
 });
 
 window.schedule = Object.freeze({
-  version: '0.8',
+  version: '0.9',
   tasks: tasksApi,
   dailyTasks: dailyTasksApi,
   pool: poolApi,

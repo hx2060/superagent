@@ -13,11 +13,11 @@ npm start                 # 本地静态服务，默认 http://127.0.0.1:4173
 
 - 入口：`index.html` → `src/app.js`。
 - 数据：`src/data.js` 的 `sampleEvents` / `sampleNotes` / `sampleTasks` / `sampleDailyTasks` 是空白种子；页面启动时优先读取 **`local/schedule.json`**（不提交仓库，缺失时回退到空白种子）。
-- 状态：视图、锚点日期、清单 / 便签、每日任务定义与按日状态都在页面内存中；刷新后回到本地内容文件 / 空白种子的初始状态。
+- 状态：视图、锚点日期在页面内存中；清单 / 便签、每日任务定义与按日状态、蓄水池条目由 `src/persistence.js` 写进浏览器本机快照（localStorage），刷新后恢复（规则见 `docs/interfaces.md` 5.4）；存储不可用时回退到「刷新即重置」的旧行为。
 - 清单 / 便签的增删改由 `src/modules/inbox` 负责，store 通过 `services.inbox` 注入；「清单」面板分当日计划与收集区，定时 / 全天 / 仅截止任务按 `src/tasks.js` 的共享映射进入日视图当日计划、周图与月视图，截止已过的任务进入周 / 月逾期回顾区。
 - 周视图由 `src/modules/week-chart/` 渲染任务 × 时间方块；它读取 `services.inbox` 的任务与 `data.events`。
 - 每日任务：日视图顶部由 `src/modules/daily-tasks/` 模块渲染；定义来自 `sampleDailyTasks` / 本地内容，按日完成状态由 `services.dailyTasks` 保存。dsh 运行时接口为 `window.schedule.dailyTasks`。
-- 目前没有后端持久化；页面内编辑不写回本地文件，持久内容由机器人 / 使用者写入 `local/schedule.json`。
+- 目前没有后端持久化；页面内编辑不写回本地文件，改写浏览器本机快照（localStorage，随原点隔离，不提交仓库）；需要跨设备 / 清理后仍保留的内容由机器人 / 使用者写入 `local/schedule.json`。
 - 没有构建步骤、没有运行时依赖；唯一的运行时请求是同源读取本地内容文件。
 
 URL 参数：
@@ -164,8 +164,8 @@ interface CalendarDataSource {
 - 删除目前是“两步确认 + 立即删除”；接入后端后建议改为可撤销删除，或在服务端保留回收站。
 - 校验规则与前端保持一致：任务标题 1–80 字符、便签 1–200 字符；开始 07:00–20:59、持续 5–720 分钟、结束不晚于 21:00；服务端仍需重复校验。
 - 范围请求只取当前视图所需区间（月视图覆盖 6 × 7 天，周视图覆盖 7 天，日视图取当天，并取当天每日任务状态）。
-- 本地内容文件只在启动时读取一次；运行时不回写，避免页面编辑覆盖机器人写入的本地内容。
-- 刷新后以服务端为准；本地只保留临时 UI 状态。
+- 本地内容文件只在启动时读取一次；运行时不回写，避免页面编辑覆盖机器人写入的本地内容。页面编辑写本机快照（localStorage）；`local/schedule.json` 变过时，快照让位给文件内容，仅按 id 保留完成状态（见 `docs/interfaces.md` 5.4）。
+- 刷新后以本机快照恢复界面状态；接入后端后仍以服务端为准，本机快照退化为乐观缓存 / 离线草稿。
 
 ### 2.5 清单 / 便签 store 接入
 
@@ -241,10 +241,10 @@ src/modules/daily-tasks/
 
 两个添加入口：
 
-- dsh：改 `sampleDailyTasks`（持久，随页面加载）或调用 `window.schedule.dailyTasks.add(...)`（会话内）。
-- 手工：日视图「每日任务」条 → `＋ 添加` → 输入标题 → `加入`（会话内）。
+- dsh：改 `sampleDailyTasks`（持久，随页面加载）或调用 `window.schedule.dailyTasks.add(...)`（写本机快照，刷新后保留）。
+- 手工：日视图「每日任务」条 → `＋ 添加` → 输入标题 → `加入`（同样写本机快照）。
 
-当前没有后端，运行时新增与手工新增刷新后不保留；需要持久化时先按下一节替换数据源。
+刷新后定义与按日状态由本机快照恢复（`local/schedule.json` 变过时以文件为准、状态按 id 保留）；接后端时按下一节替换数据源。
 
 ### 3.5 已落地示例：`inbox`（清单 / 便签 / 定时任务）
 
@@ -263,7 +263,7 @@ src/modules/inbox/
 - `index.html`：加载模块样式的一行 `<link>`。
 - `src/data.js`：`sampleTasks` / `sampleNotes`（当前为空数组）。
 
-任务时间同步：没有日期与截止的任务留在「收集区」（不计入日进度）；填写 `start` + `duration` 后绑定日期，`listCalendarEvents(date)` 派生 teal 时间表事件，进入当日计划、周图与月视图；只填 `date` 为全天任务（不进时间表）；只填 `due` 的任务在截止前进入当日计划、截止日进周 / 月视图，截止后进逾期回顾区。删除为两步确认，刷新后回到本地内容 / 空白初始状态。
+任务时间同步：没有日期与截止的任务留在「收集区」（不计入日进度）；填写 `start` + `duration` 后绑定日期，`listCalendarEvents(date)` 派生 teal 时间表事件，进入当日计划、周图与月视图；只填 `date` 为全天任务（不进时间表）；只填 `due` 的任务在截止前进入当日计划、截止日进周 / 月视图，截止后进逾期回顾区。删除为两步确认；增删改写本机快照，刷新后保留（文件变过时以文件为准）。
 
 ### 3.6 已落地示例：`attention-switch`（蓄水池）
 
@@ -285,7 +285,7 @@ src/modules/attention-switch/
 - `src/data.js`：`samplePool`（空数组）+ `pickSeedData` 可选 `pool` 键。
 - `assets/styles.css`：`.topbar-right` / `.pool-entry` 两条顶栏样式。
 
-录入三种形式：面板表单、`window.schedule.pool.add`（会话内）、`local/schedule.json` 的 `pool` 键（刷新后仍在）。刷新后回到本地文件 / 空白初值，与其它模块一致。
+录入三种形式：面板表单、`window.schedule.pool.add`、`local/schedule.json` 的 `pool` 键；修改 / 删除写本机快照，刷新后保留（文件变过时以文件为准），与其它模块一致。
 
 ### 3.7 新模块接入演练（示例）
 
@@ -367,7 +367,7 @@ exampleView = mountExample({
 - [ ] `npm test` 通过；新增纯逻辑有测试。
 - [ ] 三视图与任务状态交互回归通过。
 - [ ] 清单 / 便签新增、编辑、删除与定时任务时间表同步已检查。
-- [ ] 每日任务：手工添加、空输入、跨日重置、dsh API、刷新后会话数据回退已检查。
+- [ ] 每日任务：手工添加、空输入、跨日重置、dsh API、刷新后状态保留已检查。
 - [ ] 1440 / 1024 / 768 / 390 无横向溢出、无 console error。
 - [ ] UI 改动在本地完成 Baseline / After 对比，证据留在 `local/evidence/`；PR 用文字说明，不贴图。
 - [ ] 未提交设计备选、临时预览或敏感信息。

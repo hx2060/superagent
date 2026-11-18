@@ -3,6 +3,11 @@
  * state. A daily task is not a timed event and is not scheduled on a date; the
  * day only scopes "did I complete it today". The store is pure (no DOM) so the
  * host app and unit tests can use it directly.
+ *
+ * The per-day state can be seeded and read back as a plain object
+ * (`{ [dateKey]: { [taskId]: status } }`, only entries that differ from the
+ * default `todo` are kept) so the host persistence layer
+ * (`src/persistence.js`) can restore completion after a refresh.
  */
 
 import { parseDateKey } from '../../calendar.js';
@@ -34,6 +39,10 @@ function assertDateKey(dateKey) {
   }
 }
 
+function isPlainStatuses(value) {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
 /**
  * Validate and normalise one daily-task definition.
  * Returns null when the input is unusable; the caller decides how to react.
@@ -63,7 +72,8 @@ export function normalizeDailyTask(input) {
 
 /**
  * @param {Array<{ id?: string, title: string, icon?: string }>} seedTasks
- * @param {{ createId?: () => string }} [options]
+ * @param {{ createId?: () => string, statuses?: Record<string, Record<string, string>> }} [options]
+ *   `statuses` restores remembered per-day completion (`{ [dateKey]: { [taskId]: status } }`).
  */
 export function createDailyTaskStore(seedTasks = [], options = {}) {
   const createId = typeof options.createId === 'function' ? options.createId : defaultCreateId;
@@ -96,7 +106,10 @@ export function createDailyTaskStore(seedTasks = [], options = {}) {
       dateStatuses = new Map();
       statusesByDate.set(dateKey, dateStatuses);
     }
-    dateStatuses.set(taskId, status);
+    // `todo` is the default, so it is not stored: the map only holds entries
+    // that differ from it. Keeps snapshots small and round-trips stable.
+    if (status === 'todo') dateStatuses.delete(taskId);
+    else dateStatuses.set(taskId, status);
     emit({ type: 'status', taskId, dateKey, status });
     return status;
   }
@@ -150,6 +163,24 @@ export function createDailyTaskStore(seedTasks = [], options = {}) {
     return taskStatusCounts(tasks, dayStatuses);
   }
 
+  /**
+   * Per-day completion state as a plain object (snapshot shape): only entries
+   * that differ from the default `todo` are included. Unknown tasks, invalid
+   * date keys and unknown statuses in `seed` are ignored.
+   *
+   * @returns {Record<string, Record<string, import('../../tasks.js').TaskStatus>>}
+   */
+  function listStatuses() {
+    const result = {};
+    for (const [dateKey, byTask] of statusesByDate) {
+      for (const [taskId, status] of byTask) {
+        if (!result[dateKey]) result[dateKey] = {};
+        result[dateKey][taskId] = status;
+      }
+    }
+    return result;
+  }
+
   function subscribe(listener) {
     if (typeof listener !== 'function') {
       throw new TypeError('Daily task listener must be a function.');
@@ -175,6 +206,23 @@ export function createDailyTaskStore(seedTasks = [], options = {}) {
     tasksById.set(id, task);
   }
 
+  // Restore remembered per-day completion (host persistence). Entries for
+  // unknown tasks, invalid dates or unknown statuses are ignored, and `todo`
+  // is skipped because it is the default.
+  const seedStatuses = isPlainStatuses(options.statuses) ? options.statuses : {};
+  for (const [dateKey, byTask] of Object.entries(seedStatuses)) {
+    if (!parseDateKey(dateKey) || !byTask || typeof byTask !== 'object') continue;
+    for (const [taskId, status] of Object.entries(byTask)) {
+      if (!tasksById.has(taskId) || !TASK_STATUS_ORDER.includes(status) || status === 'todo') continue;
+      let dateStatuses = statusesByDate.get(dateKey);
+      if (!dateStatuses) {
+        dateStatuses = new Map();
+        statusesByDate.set(dateKey, dateStatuses);
+      }
+      dateStatuses.set(taskId, status);
+    }
+  }
+
   return {
     addTask,
     listTasks,
@@ -183,6 +231,7 @@ export function createDailyTaskStore(seedTasks = [], options = {}) {
     setStatus,
     toggleStatus,
     statusCounts,
+    listStatuses,
     subscribe,
   };
 }
