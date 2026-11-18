@@ -282,7 +282,7 @@ window.schedule.pool.remove('pool-01');
 })();
 ```
 
-持久化则写本地文件（不要让内容进入 GitHub）：
+持久化有两条路：页面内的更改写浏览器本机快照（localStorage，刷新后保留，规则见 `docs/interfaces.md` 5.4）；跨设备 / 清理后仍要保留的内容写本地文件（不要让内容进入 GitHub）：
 
 ```bash
 # 示意：仅在本机执行；local/ 已被 .gitignore 忽略
@@ -291,7 +291,7 @@ $EDITOR local/schedule.json
 
 ## 7. 版本与兼容
 
-- 当剂接口版本 `0.7`；本版本新增：蓄水池（`window.schedule.pool.add / list / remove`、本地内容可选 `pool` 键、三档学习状态与多档归档）；上一版本新增：全天任务（只传 `date`）、当日计划 / 收集区分区与日进度口径、周 / 月逾期回顾区、`due` 不得早于 `date` 的写入校验；`updateTask` 清空时间从「解绑日期」改为「变为全天任务」（解绑需显式 `date: ''`）。
+- 当前接口版本 `0.9`；本版本新增：本机快照持久化（界面更改写 localStorage、刷新后恢复，`local/schedule.json` 变过时以文件为准、完成状态按 id 保留；不影响机器人写文件的既有流程）；0.8 的月视图跨天长条不改变机器人接口；更早新增：蓄水池（`window.schedule.pool.add / list / remove`、本地内容可选 `pool` 键、三档学习状态与多档归档）、全天任务（只传 `date`）、当日计划 / 收集区分区与日进度口径、周 / 月逾期回顾区、`due` 不得早于 `date` 的写入校验；`updateTask` 清空时间从「解绑日期」改为「变为全天任务」（解绑需显式 `date: ''`）。
 - 新增字段保持可选；已发布字段与方法不删除、不改语义。
 - 破坏性变更需升级版本，并同步 `docs/interfaces.md` 与 `docs/integration.md`。
 - 本文件的示例内容均为中性占位；真实任务 / 时间 / 便签不写入仓库。

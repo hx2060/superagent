@@ -56,18 +56,19 @@ mount(context) -> {
 | `listTasks()` | 返回全部定义副本 |
 | `listForDate(dateKey)` | `[{ task, status }]`，`dateKey` 为 `YYYY-MM-DD` |
 | `getStatus(taskId, dateKey)` | 当天状态，缺省 `todo` |
-| `setStatus(taskId, dateKey, status)` | 写入当天状态；状态必须是 `todo / partial / done` |
+| `setStatus(taskId, dateKey, status)` | 写入当天状态；状态必须是 `todo / partial / done`；写回 `todo` 等于缺省，不占记录 |
 | `toggleStatus(taskId, dateKey)` | 按 `todo → partial → done → todo` 循环 |
 | `statusCounts(dateKey)` | `{ total, todo, partial, done, percent }`，复用 `src/tasks.js` |
+| `listStatuses()` | 按日状态快照 `{ [dateKey]: { [taskId]: status } }`，只含偏离缺省 `todo` 的条目；宿主（`src/persistence.js`）用它持久化，`createDailyTaskStore(seed, { statuses })` 回灌 |
 | `subscribe(listener)` | 返回退订函数；新增/状态变化时通知 |
 
-`createId` 选项用于测试注入确定性 id。错误码：`DAILY_TASK_INVALID`、`DAILY_TASK_DUPLICATE_ID`、`DAILY_TASK_NOT_FOUND`、`DAILY_TASK_STATUS_INVALID`、`DAILY_TASK_DATE_INVALID`。
+`createId` / `statuses` 选项用于测试与宿主恢复注入确定性 id / 按日状态。错误码：`DAILY_TASK_INVALID`、`DAILY_TASK_DUPLICATE_ID`、`DAILY_TASK_NOT_FOUND`、`DAILY_TASK_STATUS_INVALID`、`DAILY_TASK_DATE_INVALID`。
 
 ## 两个添加入口
 
 1. **dsh 下发**
    - 持久方式：在本地内容文件 `local/schedule.json` 的 `dailyTasks` 中追加定义（不提交仓库），刷新后加载。
-   - 运行时方式：`window.schedule.dailyTasks.add({ title, icon? })`。完整 API 与示例见 `docs/schedule-api.md`。
+   - 运行时方式：`window.schedule.dailyTasks.add({ title, icon? })`，写本机快照，刷新后保留。完整 API 与示例见 `docs/schedule-api.md`。
 2. **日历内手工添加**
    - 日视图顶部「每日任务」条 → `＋ 添加` → 输入名称 → `加入`。
    - 只填写标题，图标使用默认 `🔁`；`Esc` 或「取消」收起表单。
@@ -78,7 +79,7 @@ mount(context) -> {
 - 完成状态按 `YYYY-MM-DD` 隔离：同一天内切换，跨天重新从 `todo` 开始；切回旧日期可看到旧记录。
 - 当天进度只统计 `done / total`，与主干任务清单口径一致。
 - 所有文本按纯文本转义；不写入 HTML、不读取凭据。
-- 手工添加与运行时 API 新增的任务仅存在当前页面会话；刷新后回到 `local/schedule.json` / `sampleDailyTasks` 的初始定义。这是当前无后端 / 无持久化基线的限制，不是 store 契约的一部分。
+- 手工添加与运行时 API 新增的定义、按日完成状态由宿主写进本机快照（localStorage），刷新后恢复；`local/schedule.json` 变过时定义以文件为准、按 id 保留状态（规则见 `docs/interfaces.md` 5.4）。存储不可用时退回「刷新即重置」。
 - 模块不修改全局 `button` 等元素样式；类名均为 `.mod-daily-tasks-*`。
 
 ## 注册点（主干改动）
@@ -94,5 +95,5 @@ mount(context) -> {
 ## 测试与验收
 
 - `npm test` 覆盖 store 的校验、按日隔离、三态循环、进度、订阅与错误码。
-- 浏览器验证：1440 / 1024 / 768 / 390 无页面横向溢出；三视图切换、日期导航、手工添加、空输入错误、`Esc`、dsh API、跨日重置、刷新后会话数据回退均已检查。
+- 浏览器验证：1440 / 1024 / 768 / 390 无页面横向溢出；三视图切换、日期导航、手工添加、空输入错误、`Esc`、dsh API、跨日重置、刷新后状态保留均已检查。
 - Baseline / After 视觉证据只保留在本地 `local/evidence/`；仓库与 PR 不提交截图。
